@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ReproCam</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="bar">
+    <div class="brand">
+      <span class="rec" aria-hidden="true"></span>
+      <span class="wordmark">ReproCam</span>
+      <span class="tagline">Film a bug. Get a failing test.</span>
+    </div>
+    <nav class="actions">
+      <label class="btn primary" id="upload-btn">
+        Upload video
+        <input type="file" id="upload" accept="video/*" capture hidden>
+      </label>
+      <div class="sample-picker">
+        <button class="btn" id="sample-btn" aria-haspopup="true" aria-expanded="false">Try a sample bug</button>
+        <ul class="menu" id="sample-menu" hidden></ul>
+      </div>
+      <button class="btn ghost" id="fix-btn" disabled>Run against fixed build</button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="stage-grid">
+      <div class="recording">
+        <div class="viewfinder">
+          <span class="corner tl"></span><span class="corner tr"></span>
+          <span class="corner bl"></span><span class="corner br"></span>
+          <video id="video" controls playsinline muted></video>
+          <div class="empty-state" id="empty">
+            <p class="big">Show it. Say it.</p>
+            <p>Record the bug while you narrate it. ReproCam watches, writes a Playwright test, runs it,
+              and only files the ticket when the test fails for the reason you described.</p>
+          </div>
+          <span class="vf-label" id="vf-label">no recording</span>
+        </div>
+        <figure class="transcript" id="transcript" hidden>
+          <blockquote id="transcript-text"></blockquote>
+          <figcaption>narration · Muse Voice Transcribe</figcaption>
+        </figure>
+        <div class="filmstrip" id="filmstrip" aria-label="Keyframes sent to the model"></div>
+      </div>
+
+      <aside class="custody">
+        <header>
+          <h2>Chain of custody</h2>
+          <span class="clock" id="clock">00:00.0</span>
+        </header>
+        <ol class="timeline" id="timeline"></ol>
+        <p class="verdict" id="verdict" hidden></p>
+      </aside>
+    </section>
+
+    <section class="casefile">
+      <article class="card test-card" data-exhibit="exhibit A">
+        <header>
+          <h3>The test</h3>
+          <div class="stamps">
+            <span class="stamp" id="stamp-buggy" data-state="idle">buggy build</span>
+            <span class="stamp" id="stamp-fixed" data-state="idle">fixed build</span>
+          </div>
+        </header>
+        <p class="failure" id="failure"></p>
+        <pre class="code" id="code"><span class="placeholder">The generated test appears here once it's written.</span></pre>
+      </article>
+
+      <article class="card evidence-card" data-exhibit="exhibit B">
+        <header>
+          <h3>Evidence</h3>
+          <button class="link" id="evidence-replay" hidden>replay</button>
+        </header>
+        <div class="board" id="board">
+          <p class="placeholder">After the bug is reproduced, SAM 3.1 boxes the candidates and Muse Spark picks the one
+            the claim is about.</p>
+        </div>
+        <ol class="sam-steps" id="sam-steps" hidden>
+          <li data-step="propose"><b>SAM 3.1 proposes</b> <span id="sam-propose"></span></li>
+          <li data-step="decide"><b>Muse Spark decides</b> <span id="sam-decide"></span></li>
+        </ol>
+      </article>
+
+      <article class="card ticket-card" data-exhibit="exhibit C">
+        <header>
+          <h3>Ticket</h3>
+          <button class="link" id="copy-ticket" hidden>copy markdown</button>
+        </header>
+        <div class="ticket" id="ticket"><p class="placeholder">Filed only when the bug is reproduced.</p></div>
+      </article>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <span id="foot-run">Every model in the product is a Meta model: Muse Voice Transcribe · Muse Spark · SAM 3.1.</span>
+    <span id="foot-cost"></span>
+  </footer>
+  <div class="toast" id="toast" role="status" hidden></div>
+</body>
+</html>

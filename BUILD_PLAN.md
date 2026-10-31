@@ -214,13 +214,15 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
       the frame; UI labels which model produced it. Never block M4 on this.
 
 ### M6 — API + UI (Tue)
-- [ ] `api.py`: `POST /runs` (multipart) → id; `GET /runs/{id}/events` (SSE); `GET /runs/{id}`;
+- [x] `api.py`: `POST /runs` (multipart) → id; `GET /runs/{id}/events` (SSE); `GET /runs/{id}`;
       `GET /samples`; `POST /samples/{id}/replay` (replays cached events with original timing, $0).
-- [ ] `budget.py`: `MAX_RUNS_PER_DAY`, per-IP limit, 25 MB / 90 s upload cap. (Meta's Spend Limit is only an alert.)
-- [ ] `web/`: one page. Left: video. Right: live stage timeline with badges "model · provider · effort".
+- [x] `budget.py`: `MAX_RUNS_PER_DAY`, per-IP limit, 25 MB / 90 s upload cap. (Meta's Spend Limit is only an alert.)
+- [x] `web/`: one page. Left: video. Right: live stage timeline with badges "model · provider · effort".
       Bottom: test code red/green, evidence image, ticket. Buttons: Upload · Try a sample bug ·
       Run against fixed build. Mobile upload: `<input type="file" accept="video/*" capture>`.
       Distinctive design, not a template look.
+      Done Sat: bug1 sample replays end to end in the browser (docs/screenshots/m6_replay.png).
+      Live upload path covered by API tests for rejections only; a real browser upload run is still to do.
 
 ### M7 — Deploy (Tue)
 - [ ] Store → Vercel or GitHub Pages. Backend → Modal (Chromium + ffmpeg in image).

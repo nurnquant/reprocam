@@ -44,3 +44,15 @@ Ground-truth tests assert the correct behaviour, so they fail on buggy and pass 
 STORE_MODE=buggy pytest tests/store   # 3 failed
 STORE_MODE=fixed pytest tests/store   # 3 passed
 ```
+
+## Run the app
+```bash
+python -m backend.api        # http://localhost:8000 (also serves the store on :5173)
+```
+- **Try a sample bug** replays a cached run with its original timing, at $0.
+- **Upload video** starts a live run (25 MB / 90 s max; daily and per-visitor caps in `.env`).
+- **Run against fixed build** re-runs the reproducing test on `?fixed=1` (Playwright only, no model calls).
+
+Cache a finished run as a sample: `python scripts/cache_sample.py bug1`.
+
+![ReproCam replaying bug1](docs/screenshots/m6_replay.png)

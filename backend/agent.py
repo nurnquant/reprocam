@@ -98,17 +98,33 @@ def make_evidence(run: Run, run_dir: Path, from_steps: bool):
              artifact=run_dir / "evidence.png", record=False)  # calls already recorded above
 
 
-def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False) -> dict:
+def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False,
+                 run_dir: Path | None = None) -> dict:
+    """Run the whole loop for one video into run_dir (default runs/<video stem>). Always ends by
+    writing result.json, also when a stage crashes, so live event streams know the run is over."""
     video = Path(video)
-    run_dir = ROOT / "runs" / video.stem
+    run_dir = Path(run_dir) if run_dir else ROOT / "runs" / video.stem
     run_dir.mkdir(parents=True, exist_ok=True)
     for old in run_dir.glob("attempt_*"):
         shutil.rmtree(old)
+    for old in ("result.json", "ticket.md", "evidence.png", "segment.json"):
+        (run_dir / old).unlink(missing_ok=True)
     run = Run(run_dir)
-    run_id = f"{video.stem}-{int(run.started)}"
+    run_id = f"{run_dir.name}-{int(run.started)}"
     bug_id = bug_id or SAMPLE_BUGS.get(video.stem)
     app_url = os.getenv("APP_URL", "http://localhost:5173").rstrip("/")
+    try:
+        return _pipeline(run, run_dir, video, run_id, bug_id, app_url, from_steps)
+    except Exception as e:
+        run.emit("error", "fail", f"{e.__class__.__name__}: {str(e)[:200]}")
+        result = {"verdict": "ERROR", "error": f"{e.__class__.__name__}: {e}", "run_id": run_id, "bug_id": bug_id,
+                  "seconds": round(time.time() - run.started, 1), "cost_usd": run.cost()}
+        (run_dir / "result.json").write_text(json.dumps(result, indent=2))
+        raise
 
+
+def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | None, app_url: str,
+              from_steps: bool) -> dict:
     if from_steps:
         run.emit("understand", "ok", "reusing cached steps.json", artifact=run_dir / "steps.json")
     else:
@@ -171,7 +187,7 @@ def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False
                          "passes on fixed build (?fixed=1)" if ok else f"fails on fixed build: {failure_text(fixed)[:150]}",
                          attempt=attempt, artifact=fixed.get("screenshot"))
                 final = {"verdict": "REPRODUCED", "attempt": attempt, "fixcheck": fixed["outcome"],
-                         "test": str(adir / "test_repro.py"), "failure": failure_text(result)}
+                         "test": f"{adir.name}/test_repro.py", "failure": failure_text(result)}
                 make_evidence(run, run_dir, from_steps)
                 models = sorted({c["model"] for c in run.calls if c.get("model")})
                 ticket = write_ticket(run_dir, adir, result, fixed, verdict,

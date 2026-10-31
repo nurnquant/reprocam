@@ -18,6 +18,13 @@ import time
 from pathlib import Path
 
 TIMEOUT_S = 60
+REPO = str(Path(__file__).resolve().parent.parent)
+HOME = str(Path.home())
+
+
+def _scrub(text: str) -> str:
+    """Logs end up in the public repo (judge_log.jsonl): never keep local paths."""
+    return text.replace(REPO, "<repo>").replace(HOME, "~")
 
 PLUGIN = '''
 import json
@@ -81,7 +88,7 @@ def run_test(code: str, workdir: str | Path, app_url: str, fixed: bool) -> dict:
     started = time.time()
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider", "--tb=short",
+            [sys.executable, "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider", "-p", "no:warnings", "--tb=short",
              "--screenshot", "on", "--output", "artifacts", "test_repro.py"],
             cwd=workdir, env=env, capture_output=True, text=True, timeout=TIMEOUT_S)
         output = proc.stdout + proc.stderr
@@ -93,5 +100,6 @@ def run_test(code: str, workdir: str | Path, app_url: str, fixed: bool) -> dict:
                   "message": f"test did not finish within {TIMEOUT_S}s"}
 
     shots = sorted((workdir / "artifacts").rglob("*.png"))
+    result["message"] = _scrub(result.get("message") or "")
     return {**result, "fixed": fixed, "seconds": round(time.time() - started, 1),
-            "output": output[-3000:], "screenshot": str(shots[-1]) if shots else None}
+            "output": _scrub(output[-3000:]), "screenshot": str(shots[-1]) if shots else None}

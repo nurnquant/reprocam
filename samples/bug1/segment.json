@@ -1,0 +1,107 @@
+{
+  "frame": {
+    "n": 12,
+    "t": 27.017,
+    "path": "keyframes/frame_12.jpg"
+  },
+  "tried": [
+    {
+      "stage": "segment",
+      "model": "sam-3.1",
+      "provider": "meta",
+      "effort": null,
+      "mode": "image",
+      "concept": "order total",
+      "frames_processed": 1,
+      "boxes": 0,
+      "latency_s": 3.3,
+      "cost_usd": null,
+      "on_bug_frame": 0
+    },
+    {
+      "stage": "segment",
+      "model": "sam-3.1",
+      "provider": "meta",
+      "effort": null,
+      "mode": "image",
+      "concept": "price",
+      "frames_processed": 1,
+      "boxes": 4,
+      "latency_s": 2.0,
+      "cost_usd": null,
+      "on_bug_frame": 4
+    }
+  ],
+  "calls": [
+    {
+      "stage": "evidence",
+      "model": "accounts/fireworks/models/muse-spark-open",
+      "provider": "fireworks",
+      "effort": "low",
+      "prompt_tokens": 1407,
+      "completion_tokens": 222,
+      "reasoning_tokens": 145,
+      "latency_s": 4.01,
+      "finish_reason": "stop",
+      "cost_usd": 0.002702
+    }
+  ],
+  "sam_mode": "image",
+  "concept": "price",
+  "candidates": [
+    {
+      "object_id": "0",
+      "frame": null,
+      "t": null,
+      "left": 929.0,
+      "top": 344.0,
+      "right": 965.0,
+      "bottom": 355.0,
+      "confidence": null
+    },
+    {
+      "object_id": "1",
+      "frame": null,
+      "t": null,
+      "left": 913.0,
+      "top": 408.0,
+      "right": 964.0,
+      "bottom": 420.0,
+      "confidence": null
+    },
+    {
+      "object_id": "2",
+      "frame": null,
+      "t": null,
+      "left": 922.0,
+      "top": 363.0,
+      "right": 965.0,
+      "bottom": 374.0,
+      "confidence": null
+    },
+    {
+      "object_id": "3",
+      "frame": null,
+      "t": null,
+      "left": 885.0,
+      "top": 167.0,
+      "right": 923.0,
+      "bottom": 178.0,
+      "confidence": null
+    }
+  ],
+  "picked": 1,
+  "pick_reason": "Box 1 marks the 'Total' line in the order summary card at the bottom right. It shows value '-$12.40' which matches the described bugged total after the second GLOW20 application (Subtotal $27.60 with -$40.00 Discount).",
+  "method": "SAM 3.1 + Muse Spark pick",
+  "box": {
+    "object_id": "1",
+    "frame": null,
+    "t": null,
+    "left": 913.0,
+    "top": 408.0,
+    "right": 964.0,
+    "bottom": 420.0,
+    "confidence": null
+  },
+  "evidence": "evidence.png"
+}

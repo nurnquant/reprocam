@@ -1,0 +1,27 @@
+{
+  "stage": "understand",
+  "model": "accounts/fireworks/models/muse-spark-open",
+  "provider": "fireworks",
+  "effort": "low",
+  "prompt_tokens": 16938,
+  "completion_tokens": 666,
+  "reasoning_tokens": 222,
+  "latency_s": 13.74,
+  "finish_reason": "stop",
+  "cost_usd": 0.024003,
+  "frames_sent": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    11,
+    12,
+    22,
+    23
+  ]
+}

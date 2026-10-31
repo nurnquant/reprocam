@@ -1,0 +1,6 @@
+{
+  "verdict": "REPRODUCED",
+  "reason": "Test performed the claimed bug steps (add $27.60 item, apply GLOW20 twice) and the failing assertion on discount-total expected \"-$20.00\" but got \"-$40.00\", exactly the stacked discount symptom described in actual.",
+  "feedback_for_generator": "",
+  "decided_by": "model"
+}
