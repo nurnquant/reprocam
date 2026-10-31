@@ -210,3 +210,6 @@ dd { text-align: right; }
   padding: 16px clamp(16px, 4vw, 48px);
   border-top: 1px solid var(--line);
 }
+
+/* comfortable tap targets on phones (testers record on their phones too) */
+.note a, .link { display: inline-block; min-height: 32px; line-height: 32px; padding: 0 6px; }

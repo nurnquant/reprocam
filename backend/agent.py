@@ -126,7 +126,7 @@ def make_evidence(run: Run, run_dir: Path, from_steps: bool):
 
 
 def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False,
-                 run_dir: Path | None = None, known_good: str | None = None) -> dict:
+                 run_dir: Path | None = None, known_good: str | None = None, evidence: bool = True) -> dict:
     """Run the whole loop for one video into run_dir (default runs/<video stem>). Always ends by
     writing result.json, also when a stage crashes, so live event streams know the run is over."""
     video = Path(video)
@@ -142,7 +142,7 @@ def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False
     app_url = os.getenv("APP_URL", "http://localhost:5173").rstrip("/")
     try:
         kg = known_good_target(known_good if known_good is not None else os.getenv("KNOWN_GOOD_URL"), app_url)
-        return _pipeline(run, run_dir, video, run_id, bug_id, app_url, from_steps, kg)
+        return _pipeline(run, run_dir, video, run_id, bug_id, app_url, from_steps, kg, evidence)
     except Exception as e:
         run.emit("error", "fail", f"{e.__class__.__name__}: {str(e)[:200]}")
         result = {"verdict": "ERROR", "error": f"{e.__class__.__name__}: {e}", "run_id": run_id, "bug_id": bug_id,
@@ -152,7 +152,7 @@ def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False
 
 
 def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | None, app_url: str,
-              from_steps: bool, kg: tuple[str, str] | None) -> dict:
+              from_steps: bool, kg: tuple[str, str] | None, evidence: bool = True) -> dict:
     if from_steps:
         run.emit("understand", "ok", "reusing cached steps.json", artifact=run_dir / "steps.json")
     else:
@@ -230,7 +230,8 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
                     run.emit("judge", "retry", "expected behaviour is wrong: the test also fails on the known-good "
                              "build", attempt=attempt)
                     continue
-                final = finish(run, run_dir, run_id, from_steps, kg, attempt, adir, result, good, verdict, confirmed)
+                final = finish(run, run_dir, run_id, from_steps, kg, attempt, adir, result, good, verdict, confirmed,
+                               evidence)
                 break
             previous.append({"test_code": code, "outcome": result["outcome"],
                              "failure": failure_text(result), "feedback": verdict["feedback_for_generator"]})
@@ -242,7 +243,7 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
         run.emit("judge", "fail", f"no attempt passed on the known-good build; reporting attempt {u['attempt']}, "
                  "which reproduced the symptom but is not confirmed", attempt=u["attempt"])
         final = finish(run, run_dir, run_id, from_steps, kg, u["attempt"], u["adir"], u["result"], u["good"],
-                       u["verdict"], False)
+                       u["verdict"], False, evidence)
     if final is None:
         final = {"verdict": verdict["verdict"], "attempt": MAX_ATTEMPTS, "confirmed": None,
                  "known_good": kg and kg[1], "fixcheck": None}
@@ -250,20 +251,22 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
     final.update(run_id=run_id, bug_id=bug_id, testgen_prompt=f"testgen {testgen.prompt_version()}",
                  seconds=round(time.time() - run.started, 1), cost_usd=run.cost(),
                  model_calls=[{k: c.get(k) for k in ("stage", "model", "provider", "effort", "prompt_tokens",
-                                                     "completion_tokens", "frames_processed", "cost_usd")
+                                                     "completion_tokens", "reasoning_tokens", "frames_processed",
+                                                     "cost_usd")
                               if c.get(k) is not None} for c in run.calls])
     (run_dir / "result.json").write_text(json.dumps(final, indent=2))
     return final
 
 
 def finish(run: Run, run_dir: Path, run_id: str, from_steps: bool, kg, attempt: int, adir: Path, result: dict,
-           good: dict | None, verdict: dict, confirmed: bool | None) -> dict:
+           good: dict | None, verdict: dict, confirmed: bool | None, evidence: bool = True) -> dict:
     """Result for a reproduced attempt, plus evidence and ticket."""
     final = {"verdict": "REPRODUCED", "attempt": attempt, "confirmed": confirmed,
              "known_good": kg and kg[1], "fixcheck": good and good["outcome"],
              "test": f"{adir.name}/test_repro.py", "failure": failure_text(result)}
     final["label"], final["tone"] = outcome_label(final)
-    make_evidence(run, run_dir, from_steps)
+    if evidence:
+        make_evidence(run, run_dir, from_steps)
     models = sorted({c["model"] for c in run.calls if c.get("model")})
     ticket = write_ticket(run_dir, adir, result, good, verdict,
                           {"run_id": run_id, "attempt": attempt, "models": models,
