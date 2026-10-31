@@ -137,6 +137,22 @@ function setSpeedButtons(enabled) {
   document.querySelectorAll(".speed button").forEach((b) => { b.disabled = !enabled; });
 }
 
+function ownerToken() {
+  // ?owner=<token> is read once, kept in this browser only, and removed from the address bar so it
+  // never ends up in a shared /?run= link.
+  try {
+    const q = new URLSearchParams(location.search);
+    if (q.get("owner")) {
+      localStorage.setItem("reprocam_owner", q.get("owner"));
+      q.delete("owner");
+      history.replaceState(null, "", location.pathname + (q.toString() ? `?${q}` : ""));
+    }
+    return localStorage.getItem("reprocam_owner");
+  } catch {
+    return null;
+  }
+}
+
 async function startUpload(file) {
   reset("uploading …");
   setSpeedButtons(false);  // live runs go at their own pace
@@ -144,10 +160,12 @@ async function startUpload(file) {
   const form = new FormData();
   form.append("video", file);
   try {
-    const r = await api("/runs", { method: "POST", body: form });
+    const owner = ownerToken();
+    const r = await api(owner ? `/runs?owner=${encodeURIComponent(owner)}` : "/runs", { method: "POST", body: form });
     Object.assign(state, { kind: "runs", id: r.id });
     $("vf-label").textContent = `live run · ${r.id}`;
-    toast(`Live run started. ${r.left_for_you} left for you today.`);
+    toast(r.owner ? `Live run started (owner: no per-visitor cap). ${r.left_today} left today.`
+      : `Live run started. ${r.left_for_you} left for you today.`);
     history.replaceState(null, "", `?run=${r.id}`);  // the address bar is now a shareable link to this run
     listen(r.events);
   } catch (e) {
@@ -476,6 +494,7 @@ $("fix-btn").onclick = async () => {
   btn.disabled = false;
 };
 
+ownerToken();  // strip ?owner= from the address bar right away
 loadSamples().then(() => {
   const q = new URLSearchParams(location.search);
   if (q.get("sample")) startReplay(q.get("sample"));

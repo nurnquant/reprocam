@@ -68,8 +68,12 @@ def schema(testids: list[str], frame_ns: list[int]) -> dict:
     }
     return {"type": "json_schema", "json_schema": {"name": "steps", "strict": True, "schema": {
         "type": "object",
-        "properties": {"steps": {"type": "array", "items": step}, "bug_claim": claim},
-        "required": ["steps", "bug_claim"],
+        "properties": {
+            "shows_app": {"type": "boolean", "description":
+                          "true if the keyframes show the web app described by the element map (its pages, labels and "
+                          "controls); false if the recording shows something else, e.g. another site or no app at all"},
+            "steps": {"type": "array", "items": step}, "bug_claim": claim},
+        "required": ["shows_app", "steps", "bug_claim"],
         "additionalProperties": False,
     }}}
 

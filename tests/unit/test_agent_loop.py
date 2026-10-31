@@ -53,3 +53,13 @@ def test_without_known_good_the_first_reproduction_ends_the_run(monkeypatch, run
     out = agent.run_pipeline("bug2.mov", from_steps=True, run_dir=run_dir, known_good="")
     assert (out["attempt"], out["confirmed"], out["fixcheck"]) == (1, None, None)
     assert "not verified" in out["label"]
+
+
+def test_stops_before_any_test_when_the_recording_is_not_the_app(monkeypatch, run_dir):
+    steps = json.loads((run_dir / "steps.json").read_text()) | {"shows_app": False}
+    (run_dir / "steps.json").write_text(json.dumps(steps))
+    monkeypatch.setattr(agent.testgen, "generate", lambda *a: pytest.fail("no test should be written"))
+    out = agent.run_pipeline("phone.mov", from_steps=True, run_dir=run_dir, known_good="fixed")
+    assert (out["verdict"], out["attempt"], out["label"], out["tone"]) == (
+        "NOT_APP", 0, "Not a recording of the app under test", "bad")
+    assert not list(run_dir.glob("attempt_*")) and not (run_dir / "ticket.md").exists()

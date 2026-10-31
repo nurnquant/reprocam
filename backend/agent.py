@@ -30,6 +30,7 @@ from backend.understand import understand
 ROOT = Path(__file__).resolve().parent.parent
 JUDGE_LOG = ROOT / "data" / "judge_log.jsonl"
 MAX_ATTEMPTS = 3
+NOT_APP = "Not a recording of the app under test"
 KNOWN_GOOD_FEEDBACK = ("Your expected behavior is wrong: it also fails on a build where the bug is fixed; re-read "
                        "the claim. On that build the test saw: {seen}. What the known-good build shows is correct "
                        "behaviour, so assert something that holds there and still fails on the buggy build (the "
@@ -175,6 +176,11 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
                  u["meta"], artifact=run_dir / "steps.json")
     steps = json.loads((run_dir / "steps.json").read_text())
     claim = steps["bug_claim"]
+    if steps.get("shows_app") is False:  # nothing to reproduce: don't spend test attempts
+        run.emit("understand", "fail", NOT_APP)
+        final = {"verdict": "NOT_APP", "attempt": 0, "confirmed": None, "known_good": kg and kg[1], "fixcheck": None,
+                 "label": NOT_APP, "tone": "bad"}
+        return _save(run, run_dir, run_id, bug_id, final)
 
     previous, final, verdict = [], None, None
     unconfirmed = None  # best fallback: judge said REPRODUCED but the known-good build failed too
@@ -248,6 +254,10 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
         final = {"verdict": verdict["verdict"], "attempt": MAX_ATTEMPTS, "confirmed": None,
                  "known_good": kg and kg[1], "fixcheck": None}
         final["label"], final["tone"] = outcome_label(final)
+    return _save(run, run_dir, run_id, bug_id, final)
+
+
+def _save(run: Run, run_dir: Path, run_id: str, bug_id: str | None, final: dict) -> dict:
     final.update(run_id=run_id, bug_id=bug_id, testgen_prompt=f"testgen {testgen.prompt_version()}",
                  seconds=round(time.time() - run.started, 1), cost_usd=run.cost(),
                  model_calls=[{k: c.get(k) for k in ("stage", "model", "provider", "effort", "prompt_tokens",

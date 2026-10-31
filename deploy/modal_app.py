@@ -1,6 +1,7 @@
 """ReproCam on Modal: one public URL for the app (/) and the practice store (/store/).
 
     modal secret create reprocam-keys --from-dotenv .env     # keys live in a Modal Secret, never in the image
+    modal secret create reprocam-owner OWNER_TOKEN=...       # ?owner=<token> skips the per-visitor cap
     modal deploy deploy/modal_app.py
 
 The web container runs the agent but never runs generated tests: those go to a Modal Sandbox
@@ -36,7 +37,7 @@ app = modal.App("reprocam")
 runs = modal.Volume.from_name("reprocam-runs", create_if_missing=True)
 
 
-@app.function(image=web_image, secrets=[modal.Secret.from_name("reprocam-keys")],
+@app.function(image=web_image, secrets=[modal.Secret.from_name("reprocam-keys"), modal.Secret.from_name("reprocam-owner")],
               volumes={f"{REMOTE}/runs": runs}, max_containers=1, scaledown_window=600, timeout=900)
 @modal.concurrent(max_inputs=50)
 @modal.asgi_app()

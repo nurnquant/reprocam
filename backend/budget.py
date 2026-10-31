@@ -1,9 +1,11 @@
 """Cost guard for the public demo (Meta's Spend Limit is only an alert).
 
 - MAX_RUNS_PER_DAY live runs in total (from .env), MAX_RUNS_PER_IP per visitor per day
+- the owner (OWNER_TOKEN, sent as ?owner=) skips the per-visitor cap but still counts toward the day
 - uploads: at most 25 MB and 90 s of video
 Sample replays cost nothing and are never counted. State lives in runs/_budget.json.
 """
+import hmac
 import json
 import os
 import threading
@@ -50,20 +52,28 @@ def check_video(path: Path) -> float:
     return seconds
 
 
-def charge(ip: str) -> dict:
-    """Count one live run for ip, or raise BudgetError(429) if a daily limit is reached."""
+def is_owner(token: str | None) -> bool:
+    expected = os.getenv("OWNER_TOKEN", "")
+    return bool(expected and token) and hmac.compare_digest(token.encode(), expected.encode())
+
+
+def charge(ip: str, owner: bool = False) -> dict:
+    """Count one live run for ip, or raise BudgetError(429) if a daily limit is reached.
+    The owner skips the per-visitor cap but still counts toward the daily total."""
     per_day, per_ip = _limits()
     with _lock:
         state = _load()
         if state["total"] >= per_day:
             raise BudgetError(429, "Today's live runs are used up. Try a sample bug instead (free).")
-        if state["per_ip"].get(ip, 0) >= per_ip:
+        if not owner and state["per_ip"].get(ip, 0) >= per_ip:
             raise BudgetError(429, f"You've used your {per_ip} live runs for today. Samples are free.")
         state["total"] += 1
-        state["per_ip"][ip] = state["per_ip"].get(ip, 0) + 1
+        if not owner:
+            state["per_ip"][ip] = state["per_ip"].get(ip, 0) + 1
         STATE.parent.mkdir(exist_ok=True)
         STATE.write_text(json.dumps(state))
-    return {"left_today": per_day - state["total"], "left_for_you": per_ip - state["per_ip"][ip]}
+    left_for_you = None if owner else per_ip - state["per_ip"][ip]
+    return {"left_today": per_day - state["total"], "left_for_you": left_for_you, "owner": owner}
 
 
 def status(ip: str) -> dict:

@@ -150,7 +150,7 @@ async def create_run(request: Request, video: UploadFile):
             f.write(chunk)
     try:
         budget.check_video(upload)
-        left = budget.charge(ip)
+        left = budget.charge(ip, owner=budget.is_owner(request.query_params.get("owner")))
     except budget.BudgetError as e:
         upload.unlink(missing_ok=True)
         raise HTTPException(e.status, str(e)) from None
