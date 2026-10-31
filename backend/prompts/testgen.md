@@ -35,9 +35,11 @@ Rules
   than 2000 ms.
 - Before an assertion that reads a value, wait for the screen to settle on the result of the
   last action (for example `expect(locator).to_be_visible()` or a message appearing).
-- The final assertion encodes `expected`. Give it a message that shows the actual value, e.g.
-  `expect(badge, "badge should count 2 items").to_have_text("2")` or a plain
-  `assert count == 2, f"badge shows {count}, expected 2"`.
+- The final assertion encodes `expected`. Give `expect()` a fixed message string that says what
+  should be true, e.g. `expect(badge, "badge should count 2 items").to_have_text("2")`. Never read
+  the element (`inner_text()`, `text_content()`, `input_value()`, ...) to build that message: it is
+  evaluated before the assertion waits, so it can show an out-of-date value. Playwright's failure
+  output already includes the actual value.
 - If the bug is that something never happens or never finishes (a hang, a spinner that never
   stops, a page that never loads), assert what should appear with
   `expect(locator).to_be_visible(timeout=8000)`. Never rely on an action timing out.

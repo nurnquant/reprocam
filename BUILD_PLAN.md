@@ -187,6 +187,8 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
 - [x] `agent.py`: ≤3 attempts, judge feedback into testgen, events emitted, every verdict logged to
       `data/judge_log.jsonl` **including the oracle** (re-run the same test on `?fixed=1`).
 - [x] Fix check: final test on `?fixed=1` must PASS.
+- [x] `ticket.py`: markdown bug report (steps, claim, failing test + failure line, fixed-build result,
+      evidence.png if present) → `runs/<id>/ticket.md` at the end of every REPRODUCED run.
 - [ ] Acceptance: ≥2 of 3 samples reach REPRODUCED and pass on fixed, via
       `python -m backend.agent samples/bug1.mov` — bug1 REPRODUCED on attempt 1 + passes fixed (2/2 runs); bug2, bug3 pending
 - [ ] Honest retry moment: at least one sample naturally shows judge catching a wrong first test.
@@ -202,10 +204,13 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
 - [ ] Wording everywhere: "on our 3 bugs, <effort> reproduced N/9 at $X" — no general "best effort" claims.
 
 ### M5 — SAM 3.1 evidence (Mon)
-- [ ] `segment.py`: upload video (`purpose=user_data`), concept = `bug_claim.element`, parse with
+- [x] `segment.py`: upload video (`purpose=user_data`), concept = `bug_claim.element`, parse with
       `meta_sam_parser` only (port from cookbook `07_sam/01_api_basics/python`).
-- [ ] Draw box/mask on frame `bug_claim.frame_ref` → `evidence.png`.
-- [ ] Risk: UI text may segment poorly. Test first thing Monday. Fallback: Muse Spark returns a box on
+- [x] Draw box/mask on frame `bug_claim.frame_ref` → `evidence.png`.
+      Spike result (bug1): SAM finds no box for "order total" / "price total" / "discount", but "price"
+      boxes every price tightly; Muse Spark Open picks the claimed one from a numbered overlay.
+      Fallback (no SAM boxes): Muse Spark box in 0-1000 coords, within ~6 px of SAM's on bug1.
+- [x] Risk: UI text may segment poorly. Tested Sat (see spike result above). Fallback: Muse Spark returns a box on
       the frame; UI labels which model produced it. Never block M4 on this.
 
 ### M6 — API + UI (Tue)

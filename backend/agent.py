@@ -8,6 +8,7 @@ data/judge_log.jsonl together with the oracle: the same test re-run on the fixed
 The oracle never steers the loop; only the judge does (in real use there is no fixed build).
 """
 import argparse
+import asyncio
 import hashlib
 import json
 import os
@@ -19,7 +20,9 @@ from pathlib import Path
 from backend import media, testgen
 from backend.judge import judge
 from backend.llm import effort_for
-from backend.runner import run_test
+from backend.runner import failure_summary, run_test
+from backend.segment import evidence
+from backend.ticket import write_ticket
 from backend.transcribe import MODEL as TRANSCRIBE_MODEL
 from backend.transcribe import transcribe
 from backend.understand import understand
@@ -76,6 +79,25 @@ def log_verdict(run_id, bug_id, attempt, claim, code, result, verdict, oracle, m
         f.write(json.dumps(row) + "\n")
 
 
+def make_evidence(run: Run, run_dir: Path, from_steps: bool):
+    """SAM 3.1 (+ Muse Spark pick, or Muse Spark fallback) -> evidence.png. Never blocks the run."""
+    if not (run_dir / "frames.json").exists():
+        return
+    run.emit("segment", "start", "locating the broken element (SAM 3.1)")
+    try:
+        r = asyncio.run(evidence(run_dir))
+    except Exception as e:  # noqa: BLE001
+        run.emit("segment", "fail", f"no evidence image: {e.__class__.__name__}: {str(e)[:120]}")
+        return
+    for c in r["calls"]:
+        if c.get("model") != "sam-3.1":
+            run.calls.append(c)
+    tried = ", ".join(f"'{t['concept']}' {t['on_bug_frame']}" for t in r["tried"])
+    run.emit("segment", "ok", f"{r['method']} (SAM boxes on bug frame: {tried})",
+             {"model": "sam-3.1", "provider": "meta", "effort": None, "stage": "segment", "cost_usd": None},
+             artifact=run_dir / "evidence.png")
+
+
 def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False) -> dict:
     video = Path(video)
     run_dir = ROOT / "runs" / video.stem
@@ -97,8 +119,11 @@ def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False
             run.emit("transcribe", "start", "transcribing narration")
             t = transcribe(run_dir / "audio.wav")
             (run_dir / "transcript.json").write_text(json.dumps(t, indent=2))
+            asr_price = os.getenv("PRICE_META_ASR")  # USD per minute of audio
+            asr_cost = round(t.get("audioDurationMs", 0) / 60000 * float(asr_price), 6) if asr_price else None
             run.emit("transcribe", "ok", f'"{t["transcript"].strip()[:80]}"',
-                     {"stage": "transcribe", "model": TRANSCRIBE_MODEL, "provider": "meta", "effort": None, "cost_usd": None},
+                     {"stage": "transcribe", "model": TRANSCRIBE_MODEL, "provider": "meta", "effort": None,
+                      "cost_usd": asr_cost},
                      artifact=run_dir / "transcript.json")
         run.emit("understand", "start", "reading keyframes + narration")
         u = understand(run_dir)
@@ -125,7 +150,7 @@ def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False
                 run.emit("run", "start", "running on buggy build (?fixed=0)", attempt=attempt)
                 result = run_test(code, adir / "buggy", app_url, fixed=False)
                 run.emit("run", "ok" if result["outcome"] == "pass" else "fail",
-                         f"{result['outcome']}: {(result.get('message') or '').splitlines()[0][:120] if result.get('message') else 'passed'}",
+                         f"{result['outcome']}: {failure_summary(result.get('message'))[:160] or 'passed'}",
                          attempt=attempt, artifact=result.get("screenshot"))
 
             verdict, judge_meta = judge(claim, code, result)
@@ -147,6 +172,11 @@ def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False
                          attempt=attempt, artifact=fixed.get("screenshot"))
                 final = {"verdict": "REPRODUCED", "attempt": attempt, "fixcheck": fixed["outcome"],
                          "test": str(adir / "test_repro.py"), "failure": failure_text(result)}
+                make_evidence(run, run_dir, from_steps)
+                models = sorted({c["model"] for c in run.calls if c.get("model")})
+                ticket = write_ticket(run_dir, adir, result, fixed, verdict,
+                                      {"run_id": run_id, "attempt": attempt, "models": models})
+                run.emit("ticket", "ok", "bug report written", attempt=attempt, artifact=ticket)
                 break
             previous.append({"test_code": code, "outcome": result["outcome"],
                              "failure": failure_text(result), "feedback": verdict["feedback_for_generator"]})

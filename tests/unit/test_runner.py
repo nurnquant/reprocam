@@ -53,3 +53,10 @@ def test_lint_requires_explicit_build_flag():
     assert "fixed" in lint('def test_x(page):\n    page.goto(f"{APP_URL}/index.html")\n')
     assert "fixed" in lint('def test_x(page):\n    page.goto(f"{APP_URL}/index.html?fixed=0")\n')
     assert "import" in lint('import requests\n' + ok)
+
+
+def test_lint_rejects_expect_message_that_reads_the_element():
+    ok = 'def test_x(page):\n    page.goto(f"{APP_URL}/i.html?fixed={FIXED}")\n'
+    stale = ok + '    t = page.get_by_test_id("t")\n    expect(t, f"got {t.inner_text()}").to_have_text("1")\n'
+    assert "inner_text" in lint(stale)
+    assert lint(ok + '    expect(page.get_by_test_id("t"), "total should be 1").to_have_text("1")\n') is None

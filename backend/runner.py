@@ -59,6 +59,15 @@ def pytest_sessionfinish(session):
 '''
 
 
+def failure_summary(message: str | None) -> str:
+    """First line of a failure plus Playwright's 'Expected value' / 'Actual value' lines."""
+    lines = [ln.strip() for ln in (message or "").splitlines() if ln.strip()]
+    if not lines:
+        return ""
+    keep = [lines[0]] + [ln for ln in lines[1:4] if ln.startswith(("Expected", "Actual", "Received"))]
+    return " | ".join(keep)
+
+
 def run_test(code: str, workdir: str | Path, app_url: str, fixed: bool) -> dict:
     """Write and run test_repro.py in workdir. Returns outcome, exc_type, message, output, screenshot."""
     workdir = Path(workdir)

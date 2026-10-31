@@ -20,6 +20,8 @@ SCHEMA = {"type": "json_schema", "json_schema": {"name": "test", "strict": True,
     "required": ["test_code", "notes"],
     "additionalProperties": False,
 }}}
+READS = {"inner_text", "text_content", "input_value", "get_attribute", "inner_html", "all_inner_texts",
+         "all_text_contents"}
 ALLOWED_IMPORTS = {"os", "re", "math", "decimal", "json", "time", "pytest", "playwright"}
 
 
@@ -38,6 +40,15 @@ def lint(code: str) -> str | None:
         bad = [n for n in names if n.split(".")[0] not in ALLOWED_IMPORTS]
         if bad:
             return f"import not allowed: {', '.join(bad)}"
+    for node in ast.walk(tree):
+        is_expect = isinstance(node, ast.Call) and getattr(node.func, "id", None) == "expect"
+        if is_expect and len(node.args) + len(node.keywords) > 1:
+            msg = node.args[1] if len(node.args) > 1 else node.keywords[0].value
+            reads = [c.func.attr for c in ast.walk(msg)
+                     if isinstance(c, ast.Call) and getattr(c.func, "attr", None) in READS]
+            if reads:
+                return (f"line {node.lineno}: expect() message calls {reads[0]}(); it runs before the assertion "
+                        "waits and can show a stale value. Use a fixed message string.")
     gotos = re.findall(r"page\.goto\((.*?)\)\s*$", code, flags=re.M)
     if not gotos:
         return "no page.goto(...) call"
