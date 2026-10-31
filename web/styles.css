@@ -109,11 +109,19 @@ main { padding: 24px clamp(16px, 3vw, 40px) 40px; display: grid; gap: 24px; }
 .filmstrip figure.bug figcaption { color: var(--signal); }
 
 .custody { background: var(--night-2); border: 1px solid var(--line-dark); border-radius: 2px; padding: 18px 20px; display: flex; flex-direction: column; min-height: 0; }
-.custody > header { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px dashed var(--line-dark); padding-bottom: 10px; }
+.custody > header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-bottom: 1px dashed var(--line-dark); padding-bottom: 10px; }
+.custody h2 { margin-right: auto !important; }
+.speed { display: inline-flex; border: 1px solid var(--line-dark); border-radius: 3px; overflow: hidden; align-self: center; }
+.speed button {
+  font: 600 11px var(--mono); color: var(--muted-light); background: none; border: 0; padding: 4px 9px; cursor: pointer;
+}
+.speed button + button { border-left: 1px solid var(--line-dark); }
+.speed button.on { background: var(--paper); color: var(--ink); }
+.speed button:disabled { opacity: .35; cursor: not-allowed; }
 .custody h2 { font: 400 26px var(--serif); margin: 0; }
 .clock { font: 500 13px var(--mono); color: var(--muted-light); }
 
-.timeline { list-style: none; margin: 8px 0 0; padding: 0; counter-reset: step; overflow-y: auto; max-height: 560px; }
+.timeline { list-style: none; margin: 8px 0 0; padding: 0; }
 .timeline li {
   display: grid; grid-template-columns: 34px 1fr auto; column-gap: 10px; row-gap: 2px;
   padding: 11px 0; border-bottom: 1px solid var(--night-3); animation: enter .35s ease-out;
@@ -174,12 +182,14 @@ main { padding: 24px clamp(16px, 3vw, 40px) 40px; display: grid; gap: 24px; }
 .failure { font: 500 12.5px/1.45 var(--mono); color: var(--signal); margin: 0 0 8px; min-height: 0; white-space: pre-wrap; }
 .failure:empty { display: none; }
 .code {
+  position: relative; /* offsetTop of lines is measured from here (auto-scroll to the failing line) */
   margin: 0; background: var(--night); color: #e8dfcd; border-radius: 2px; padding: 12px 0;
   font: 12px/1.6 var(--mono); max-height: 460px; overflow: auto; counter-reset: ln;
 }
 .code .placeholder { padding: 0 14px; display: block; }
-.code .ln { display: block; padding: 0 14px 0 0; white-space: pre; }
-.code .ln::before { counter-increment: ln; content: counter(ln); display: inline-block; width: 3.2em; padding-right: 1em; text-align: right; color: #5d554a; }
+/* wrapped lines hang under the code, not under the line number */
+.code .ln { display: block; padding: 0 14px 0 4.2em; text-indent: -4.2em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.code .ln::before { counter-increment: ln; content: counter(ln); display: inline-block; width: 3.2em; padding-right: 1em; text-indent: 0; text-align: right; color: #5d554a; }
 .code .ln.hit { background: rgba(230, 30, 60, .22); box-shadow: inset 3px 0 var(--signal); }
 .code .k { color: #f0a868; } .code .s { color: #a8d08d; } .code .c { color: #7d7466; font-style: italic; } .code .f { color: #8fc2e8; }
 
@@ -211,6 +221,7 @@ main { padding: 24px clamp(16px, 3vw, 40px) 40px; display: grid; gap: 24px; }
 .sam-steps b { font-weight: 600; }
 
 .ticket { font-size: 13.5px; max-height: 600px; overflow: auto; padding-right: 4px; }
+.ticket.more { -webkit-mask-image: linear-gradient(#000 calc(100% - 56px), transparent); mask-image: linear-gradient(#000 calc(100% - 56px), transparent); }
 .ticket h1 { font: 400 22px/1.15 var(--serif); margin: 0 0 8px; }
 .ticket h2 { font: 600 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 16px 0 6px; }
 .ticket p { margin: 6px 0; }

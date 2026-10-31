@@ -3,7 +3,11 @@
 // run summary as its event arrives. ?sample=bug1&speed=4 starts a replay on load.
 
 const $ = (id) => document.getElementById(id);
-const state = { kind: null, id: null, summary: null, source: null, rows: new Map(), n: 0, t0: null, timer: null };
+const state = {
+  kind: null, id: null, summary: null, source: null, rows: new Map(), n: 0, t0: null, timer: null,
+  speed: Number(new URLSearchParams(location.search).get("speed")) || 2,  // samples replay at 2x by default
+  next: 0,  // index of the next replay event, so a speed change can resume from it
+};
 
 const STAGES = {
   frames: "Pull keyframes + audio",
@@ -55,7 +59,7 @@ async function refresh() {
 function reset(label) {
   state.source?.close();
   clearInterval(state.timer);
-  Object.assign(state, { summary: null, rows: new Map(), n: 0, t0: null });
+  Object.assign(state, { summary: null, rows: new Map(), n: 0, t0: null, timer: null, next: 0 });
   $("timeline").replaceChildren();
   $("verdict").hidden = true;
   $("clock").textContent = fmtClock(0);
@@ -76,22 +80,44 @@ function reset(label) {
 
 function listen(url) {
   state.source = new EventSource(url);
-  state.source.onmessage = (m) => onEvent(JSON.parse(m.data));
+  state.source.onmessage = (m) => { state.next += 1; onEvent(JSON.parse(m.data)); };
   state.source.addEventListener("done", (m) => { state.source.close(); onDone(JSON.parse(m.data)); });
   state.source.onerror = () => { if (state.source.readyState === EventSource.CLOSED) return; };
 }
 
-async function startReplay(id, speed = 1) {
+async function startReplay(id) {
   reset(`sample · ${id} · replay`);
   Object.assign(state, { kind: "samples", id });
+  setSpeedButtons(true);
   const s = await refresh();
   showVideo(s.video_url);
   const { events } = await api(`/samples/${id}/replay`, { method: "POST" });
-  listen(`${events}?speed=${speed}`);
+  state.eventsUrl = events;
+  listen(`${events}?speed=${state.speed}`);
+}
+
+function replayTime() {
+  return state.t0 == null ? 0 : ((performance.now() - state.t0) / 1000) * state.speed;
+}
+
+function setSpeed(speed) {
+  const t = replayTime();
+  state.speed = speed;
+  document.querySelectorAll(".speed button").forEach((b) => b.classList.toggle("on", Number(b.dataset.speed) === speed));
+  const replaying = state.kind === "samples" && state.source && state.source.readyState !== EventSource.CLOSED;
+  if (!replaying) return;
+  state.source.close();  // resume the stream at the new speed from where we are
+  if (state.t0 != null) state.t0 = performance.now() - (t * 1000) / speed;
+  listen(`${state.eventsUrl}?speed=${speed}&after=${state.next}&offset=${t.toFixed(2)}`);
+}
+
+function setSpeedButtons(enabled) {
+  document.querySelectorAll(".speed button").forEach((b) => { b.disabled = !enabled; });
 }
 
 async function startUpload(file) {
   reset("uploading …");
+  setSpeedButtons(false);  // live runs go at their own pace
   showVideo(URL.createObjectURL(file));
   const form = new FormData();
   form.append("video", file);
@@ -116,12 +142,11 @@ function showVideo(src) {
 // ---------- events ----------
 
 function tick(t) {
-  const speed = Number(new URLSearchParams(location.search).get("speed") || 1);
+  const speed = state.kind === "samples" ? state.speed : 1;
   state.t0 = performance.now() - (t * 1000) / speed;
   if (!state.timer) {
-    state.timer = setInterval(() => {
-      $("clock").textContent = fmtClock(((performance.now() - state.t0) / 1000) * speed);
-    }, 100);
+    state.timer = setInterval(() => { $("clock").textContent = fmtClock(state.kind === "samples" ? replayTime()
+      : (performance.now() - state.t0) / 1000); }, 100);
   }
 }
 
@@ -158,7 +183,6 @@ function row(e) {
   const bEl = li.querySelector(".badge");
   if (b) { bEl.innerHTML = b; bEl.hidden = false; }
   li.querySelector(".detail").textContent = e.detail || "";
-  li.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 async function onEvent(e) {
@@ -248,7 +272,10 @@ function highlightFailure(summary) {
   const lines = [...$("code").querySelectorAll(".ln")];
   const hit = lines.find((l) => first && l.textContent.includes(first.slice(0, 40)));
   lines.forEach((l) => l.classList.toggle("hit", l === hit));
-  hit?.scrollIntoView({ block: "center", behavior: "smooth" });
+  if (hit) {  // scroll the code panel only, never the page
+    const code = $("code");
+    code.scrollTo({ top: hit.offsetTop - code.clientHeight / 2 + hit.offsetHeight / 2, behavior: "smooth" });
+  }
 }
 
 function stamp(id, st) {
@@ -347,7 +374,13 @@ function renderMd(md, base) {
 }
 
 function renderTicket(s) {
-  $("ticket").innerHTML = renderMd(s.ticket_md, s.files_base);
+  // The card skips the ticket's Evidence section (Exhibit B shows it); "copy markdown" keeps it.
+  const md = s.ticket_md.replace(/^## Evidence\n[\s\S]*?(?=^## )/m, "");
+  const t = $("ticket");
+  t.innerHTML = renderMd(md, s.files_base);
+  const fade = () => t.classList.toggle("more", t.scrollTop + t.clientHeight < t.scrollHeight - 4);
+  t.onscroll = fade;
+  fade();  // fades the bottom edge while there is more to scroll
   $("copy-ticket").hidden = false;
   $("copy-ticket").onclick = async () => {
     await navigator.clipboard.writeText(s.ticket_md);
@@ -374,6 +407,8 @@ function toggleMenu(open) {
 
 $("sample-btn").onclick = (ev) => { ev.stopPropagation(); toggleMenu($("sample-menu").hidden); };
 document.addEventListener("click", () => toggleMenu(false));
+document.querySelectorAll(".speed button").forEach((b) => { b.onclick = () => setSpeed(Number(b.dataset.speed)); });
+setSpeed(state.speed);
 $("upload").onchange = (ev) => { const f = ev.target.files[0]; if (f) startUpload(f); ev.target.value = ""; };
 
 $("fix-btn").onclick = async () => {
@@ -395,5 +430,5 @@ $("fix-btn").onclick = async () => {
 
 loadSamples().then(() => {
   const q = new URLSearchParams(location.search);
-  if (q.get("sample")) startReplay(q.get("sample"), Number(q.get("speed") || 1));
+  if (q.get("sample")) startReplay(q.get("sample"));
 }).catch((e) => toast(`Can't reach the ReproCam API: ${e.message}`));

@@ -179,15 +179,17 @@ def replay(sid: str):
 
 
 @app.get("/samples/{sid}/events")
-async def sample_events(sid: str, speed: float = 1.0):
+async def sample_events(sid: str, speed: float = 1.0, after: int = 0, offset: float = 0.0):
+    """Replay from event `after` on, as if `offset` seconds of the original run had passed
+    (lets the UI change speed mid-replay by reconnecting)."""
     d = _dir("samples", sid)
     events = [json.loads(line) for line in (d / "events.jsonl").read_text().splitlines() if line.strip()]
     speed = min(max(speed, 0.5), 20.0)
 
     async def stream():
         started = time.time()
-        for e in events:
-            wait = e["t"] / speed - (time.time() - started)
+        for e in events[max(0, after):]:
+            wait = (e["t"] - offset) / speed - (time.time() - started)
             if wait > 0:
                 await asyncio.sleep(wait)
             yield _sse({**e, "replay": True})

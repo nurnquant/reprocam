@@ -54,6 +54,9 @@
       <aside class="custody">
         <header>
           <h2>Chain of custody</h2>
+          <div class="speed" role="group" aria-label="Replay speed">
+            <button data-speed="1">1×</button><button data-speed="2" class="on">2×</button><button data-speed="4">4×</button>
+          </div>
           <span class="clock" id="clock">00:00.0</span>
         </header>
         <ol class="timeline" id="timeline"></ol>
@@ -100,7 +103,7 @@
   </main>
 
   <footer class="foot">
-    <span id="foot-run">Every model in the product is a Meta model: Muse Voice Transcribe · Muse Spark · SAM 3.1.</span>
+    <span id="foot-run">Every model in the product is a Meta model: Muse Voice Transcribe · Muse Spark · Muse Spark Open (open weights, on Fireworks) · SAM 3.1.</span>
     <span id="foot-cost"></span>
   </footer>
   <div class="toast" id="toast" role="status" hidden></div>
