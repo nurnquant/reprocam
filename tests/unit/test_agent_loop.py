@@ -63,3 +63,14 @@ def test_stops_before_any_test_when_the_recording_is_not_the_app(monkeypatch, ru
     assert (out["verdict"], out["attempt"], out["label"], out["tone"]) == (
         "NOT_APP", 0, "Not a recording of the app under test", "bad")
     assert not list(run_dir.glob("attempt_*")) and not (run_dir / "ticket.md").exists()
+
+
+def test_a_not_app_flag_contradicted_by_grounded_steps_does_not_stop_the_run(monkeypatch, run_dir):
+    # the measured false positive: shows_app=False, yet 7 steps on the store's own testids
+    grounded = [{"n": i, "action": "click", "target": "t", "selector_hint": h, "value": None, "frame_ref": 0}
+                for i, h in enumerate(["product-card-linen-towels", "add-to-cart", "view-cart", "promo-apply"], 1)]
+    steps = json.loads((run_dir / "steps.json").read_text()) | {"shows_app": False, "steps": grounded}
+    (run_dir / "steps.json").write_text(json.dumps(steps))
+    fake(monkeypatch, ["assert_fail"], ["pass"], ["REPRODUCED"])
+    out = agent.run_pipeline("bug1.mov", from_steps=True, run_dir=run_dir, known_good="fixed")
+    assert (out["verdict"], out["attempt"]) == ("REPRODUCED", 1)

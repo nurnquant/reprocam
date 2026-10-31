@@ -17,7 +17,13 @@ from PIL import Image, ImageChops
 from backend import dom_snapshot
 from backend.llm import chat
 
-PROMPT = Path(__file__).resolve().parent / "prompts" / "understand.md"
+PROMPTS = Path(__file__).resolve().parent / "prompts"
+DEFAULT_PROMPT = "v1"  # v2 only becomes the default if it is at least as stable on all 3 bugs
+
+
+def prompt_version() -> str:
+    """prompts/understand_<version>.md, chosen by UNDERSTAND_PROMPT (default: DEFAULT_PROMPT)."""
+    return os.getenv("UNDERSTAND_PROMPT") or DEFAULT_PROMPT
 ACTIONS = ["goto", "click", "fill", "select", "press", "wait"]
 # Frames differing from the last kept frame in fewer pixels than this (on a 320 px wide
 # grayscale copy, per-pixel change > 24) are duplicates: a moving cursor changes ~10 px,
@@ -83,7 +89,8 @@ def _image_part(path: Path) -> dict:
     return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}}
 
 
-def understand(run_dir: str | Path, effort: str | None = None, provider: str | None = None) -> dict:
+def understand(run_dir: str | Path, effort: str | None = None, provider: str | None = None,
+               version: str | None = None) -> dict:
     run_dir = Path(run_dir)
     manifest = json.loads((run_dir / "frames.json").read_text())
     transcript_file = run_dir / "transcript.json"
@@ -99,9 +106,13 @@ def understand(run_dir: str | Path, effort: str | None = None, provider: str | N
     content.append({"type": "text", "text": f"Narration transcript:\n{transcript or '(no narration)'}"})
     content.append({"type": "text", "text": f"Element map:\n{dom_snapshot.to_prompt(rows)}"})
 
-    messages = [{"role": "system", "content": PROMPT.read_text()}, {"role": "user", "content": content}]
+    version = version or prompt_version()
+    messages = [{"role": "system", "content": (PROMPTS / f"understand_{version}.md").read_text()},
+                {"role": "user", "content": content}]
     text, meta = chat(messages, stage="understand", effort=effort, provider=provider,
-                      response_format=schema(dom_snapshot.testids(rows), [f["n"] for f in frames]))
+                      response_format=schema(dom_snapshot.testids(rows), [f["n"] for f in frames]),
+                      log_extra={"prompt_version": f"understand {version}"})
+    meta["prompt_version"] = f"understand {version}"
     result = json.loads(text)
     for i, step in enumerate(result["steps"], 1):  # contract numbers steps from 1
         step["n"] = i

@@ -25,6 +25,7 @@ from backend.segment import evidence
 from backend.ticket import write_ticket
 from backend.transcribe import MODEL as TRANSCRIBE_MODEL
 from backend.transcribe import transcribe
+from backend.understand import prompt_version as understand_prompt_version
 from backend.understand import understand
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -172,11 +173,16 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
                      artifact=run_dir / "transcript.json")
         run.emit("understand", "start", "reading keyframes + narration")
         u = understand(run_dir)
-        run.emit("understand", "ok", f"{len(u['steps']['steps'])} steps; claim: {u['steps']['bug_claim']['summary']}",
+        run.emit("understand", "ok", f"[{u['meta']['prompt_version']}] {len(u['steps']['steps'])} steps; "
+                 f"claim: {u['steps']['bug_claim']['summary']}",
                  u["meta"], artifact=run_dir / "steps.json")
     steps = json.loads((run_dir / "steps.json").read_text())
     claim = steps["bug_claim"]
-    if steps.get("shows_app") is False:  # nothing to reproduce: don't spend test attempts
+    grounded = sum(1 for st in steps.get("steps", []) if st.get("selector_hint"))
+    # Stop only when the model says "not the app" AND its own steps agree (fewer than 2 element-map
+    # ids). Measured: the flag alone was wrongly false on 2 of 18 real recordings, each time with
+    # 7-9 grounded steps; real non-app videos give ~1 step with none.
+    if steps.get("shows_app") is False and grounded < 2:
         run.emit("understand", "fail", NOT_APP)
         final = {"verdict": "NOT_APP", "attempt": 0, "confirmed": None, "known_good": kg and kg[1], "fixcheck": None,
                  "label": NOT_APP, "tone": "bad"}
@@ -259,6 +265,7 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
 
 def _save(run: Run, run_dir: Path, run_id: str, bug_id: str | None, final: dict) -> dict:
     final.update(run_id=run_id, bug_id=bug_id, testgen_prompt=f"testgen {testgen.prompt_version()}",
+                 understand_prompt=f"understand {understand_prompt_version()}",
                  seconds=round(time.time() - run.started, 1), cost_usd=run.cost(),
                  model_calls=[{k: c.get(k) for k in ("stage", "model", "provider", "effort", "prompt_tokens",
                                                      "completion_tokens", "reasoning_tokens", "frames_processed",
