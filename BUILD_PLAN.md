@@ -1,4 +1,4 @@
-# ReproCam — Build Plan v2
+# ReproCam — Build Plan v2.1
 
 Read `CLAUDE.md` first (rules, endpoints, model ids). This file is the work order.
 Work milestone by milestone. After each one: run its acceptance check, commit
@@ -17,6 +17,19 @@ Work milestone by milestone. After each one: run its acceptance check, commit
    on Fireworks until Nov 30), trained on data our own system generates and labels. Gated.
 5. **Judge training data is logged from day one** so M9 costs little extra.
 6. **No non-Meta models in the product** (e.g. no DeepSeek router), even if cheaper.
+
+### v2.1 review fixes
+- M9 label table now covers all 9 buggy×fixed outcomes; ambiguous cells are dropped, not guessed.
+- Bug registry entries are tagged `demo` or `training`; training bugs only switch on with `?train=1`.
+- M4b repeats each cell 3× (27 runs); claims are worded "on our 3 bugs", never "best".
+- `preflight.py` runs **first** in M2; if a provider ignores `reasoning_effort`, M4b runs only where it works.
+- Demo script numbers come from a real recorded run, not from this plan.
+- Eval rows are selected by rule, never by hand; Muse Spark Open's eval score is flagged as tuned-on.
+- Fireworks facts (free LoRA cutoff, Glimmer id) come from Fireworks' Oct 30 workshop deck — confirm in
+  Fireworks docs/console before M9 depends on them.
+- **Rule judge fix:** a Playwright `expect()` timeout is an *assertion failure*, not a test error —
+  otherwise `zip_hang` (a hang bug) can never be judged REPRODUCED.
+- Always pass the build flag explicitly (`?fixed=0` or `?fixed=1`) — it persists in localStorage.
 
 ---
 
@@ -133,18 +146,22 @@ Demo bugs (each switched off by `?fixed=1`, persisted in localStorage):
 2. `qty_stepper` — "−" at quantity 1 gives 0 but still charges, or "+" adds 2.
 3. `zip_hang` — ZIPs starting with `0` leave "Place order" spinning forever.
 
-Implement bugs behind a registry (`store/bugs.js`: `{id: enabled}`) so M9 can add more quickly.
+Bugs live in the registry `store/bugs.js` (done). When M9 starts, change entries to
+`{id: {on: true, set: "demo"|"training"}}`; `training` bugs are active only with `?train=1`, so the
+public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fixed=0|1` explicitly.
 
 - [x] Store runs; 3 bugs reproducible by hand; `?fixed=1` removes each
 - [x] `tests/store/`: hand-written test per bug — fails on buggy, passes on fixed (ground truth)
 
 ### M2 — Media + transcription (Sat)
-- [ ] `media.py`: ffmpeg → `audio.wav` (mono 16-bit PCM; sample rate per cookbook) and keyframes
+- [ ] **First:** `scripts/preflight.py` — for each provider: is image input accepted? which
+      `reasoning_effort` values are accepted **and actually change behaviour** (compare reasoning
+      tokens / output length low vs high on one prompt)? Print a table; record it in `docs/preflight.md`.
+- [x] `media.py`: ffmpeg → `audio.wav` (mono 16-bit PCM; sample rate per cookbook) and keyframes
       (scene-change, fallback 1 fps, cap 24, ≤1280 px wide, JPEG)
 - [ ] `transcribe.py`: POST `https://api.meta.ai/v1/asr/transcribe`, `Authorization` header,
       model `muse-voice-transcribe-1.0`; port from cookbook `06_muse_voice/01_voice_api_fundamentals/utils.py`.
       `keywords` = product names + "promo", "checkout", "ZIP".
-- [ ] `scripts/preflight.py` (efforts + image input per provider; prints a table)
 - [ ] Nur records 3 narrated sample videos (QuickTime screen + mic) → `samples/`
 - [ ] Acceptance: `python -m backend.media samples/bug1.mov` prints transcript + frame count
 
@@ -157,13 +174,16 @@ Implement bugs behind a registry (`store/bugs.js`: `{id: enabled}`) so M9 can ad
 
 ### M4 — Test generation + runner + verify loop (Sun → Mon) ← core
 - [ ] `testgen.py`: steps + DOM map + bug_claim (+ judge feedback) → `test_repro.py`
-      (pytest + Playwright sync API, `expect()`, no sleeps > 2 s, base URL from env, `?fixed` from env)
+      (pytest + Playwright sync API, `expect()`, no sleeps > 2 s, base URL from env, `?fixed=0|1` always explicit).
+      Hang/never-finishes bugs must be asserted with `expect(...).to_be_visible(timeout=8000)`, never by waiting on an action
 - [ ] `runner.py`: subprocess `pytest -x -q`, 60 s timeout, capture output, failure message,
       final screenshot. Generated code only ever runs inside this subprocess.
 - [ ] `judge.py`, rule layer first:
       - passed → `NOT_REPRODUCED`
-      - error that isn't an assertion (selector not found, timeout before assertion, syntax) → `TEST_ERROR`
-      - assertion failure → model judge: does the failure match `bug_claim`? (Muse Spark Open, effort low)
+      - error that isn't an assertion (selector not found, action timeout like `page.click`,
+        syntax/import error) → `TEST_ERROR`
+      - assertion failure — **including `expect()` timeouts** (Playwright raises `AssertionError`)
+        and plain `assert` → model judge: does the failure match `bug_claim`? (Muse Spark Open, effort low)
 - [ ] `agent.py`: ≤3 attempts, judge feedback into testgen, events emitted, every verdict logged to
       `data/judge_log.jsonl` **including the oracle** (re-run the same test on `?fixed=1`).
 - [ ] Fix check: final test on `?fixed=1` must PASS.
@@ -173,11 +193,13 @@ Implement bugs behind a registry (`store/bugs.js`: `{id: enabled}`) so M9 can ad
       Never fake it.
 
 ### M4b — Effort sweep (Mon, ~1 h)
-- [ ] `scripts/effort_sweep.py`: for each of the 3 samples × efforts {low, medium, high}, run the
-      pipeline from cached `steps.json` (skip transcription/understanding to save money).
+- [ ] `scripts/effort_sweep.py`: 3 samples × efforts {low, medium, high} × **3 repeats = 27 runs**,
+      from cached `steps.json` (skip transcription/understanding to save money). Only for providers where
+      preflight showed effort actually changes behaviour.
       Deterministic score: REPRODUCED **and** passes on fixed. Record attempts, tokens, cost, seconds.
 - [ ] Cache to `data/effort_sweep.jsonl` (resume on rerun). Chart → `docs/effort_sweep.png`.
-- [ ] Set `.env` defaults from the result. Read 10 outputs by hand before trusting the chart.
+- [ ] Chart shows mean and spread per effort. Set `.env` defaults from the result. Read 10 outputs by hand.
+- [ ] Wording everywhere: "on our 3 bugs, <effort> reproduced N/9 at $X" — no general "best effort" claims.
 
 ### M5 — SAM 3.1 evidence (Mon)
 - [ ] `segment.py`: upload video (`purpose=user_data`), concept = `bug_claim.element`, parse with
@@ -214,12 +236,21 @@ In development we have a perfect oracle (buggy vs fixed build). In real use ther
 so we distill the oracle into a small specialized Meta open-weight model.
 
 Labels from the oracle (deterministic, no LLM):
-| buggy run | fixed run | label |
-|---|---|---|
-| assertion failure | pass | REPRODUCED |
-| pass | pass | NOT_REPRODUCED |
-| error (non-assertion) | any | TEST_ERROR |
-| assertion failure | assertion failure | NOT_REPRODUCED (wrong reason) |
+All 9 outcome pairs (`assert_fail` includes `expect()` timeouts; `error` = non-assertion error):
+
+| buggy run | fixed run | label | why |
+|---|---|---|---|
+| assert_fail | pass | REPRODUCED | fails only when the bug is present |
+| assert_fail | assert_fail | NOT_REPRODUCED | fails for a reason unrelated to the bug |
+| assert_fail | error | **drop row** | ambiguous: test breaks on the fixed build |
+| pass | pass | NOT_REPRODUCED | never exercises the bug |
+| pass | assert_fail | NOT_REPRODUCED | asserts the opposite of the claim |
+| pass | error | NOT_REPRODUCED | doesn't reproduce on buggy |
+| error | pass | TEST_ERROR | broken on buggy |
+| error | assert_fail | TEST_ERROR | broken on buggy |
+| error | error | TEST_ERROR | broken test |
+
+`gen_judge_data.py` implements exactly this table as a lookup (with a unit test) and logs dropped rows.
 
 Steps:
 - [ ] Add 5 **training-only** bugs to the store registry (e.g. wrong tax rounding, sale badge on
@@ -231,7 +262,12 @@ Steps:
       Resume-safe, cached, cost-capped.
 - [ ] Format: chat JSONL `{"messages":[system, user, assistant]}`; assistant = compact JSON verdict.
       System prompt gives the schema, not the rules. No near-duplicates across train/eval.
-- [ ] Eval set: all logged runs on demo bugs 1–3 (from M4/M4b) + 40 held-out generated rows.
+- [ ] Eval set, selected by rule only (never hand-picked): **every** logged run on demo bugs 1–3
+      (M4/M4b) with a non-dropped oracle label, de-duplicated by test code hash, + 40 held-out generated
+      rows (random, fixed seed). Note in README: Muse Spark Open's judge prompt was tuned on demo-bug runs,
+      so its score there is optimistic; Glimmer never saw them.
+- [ ] Before training: confirm in Fireworks docs/console the Glimmer base id, that LoRA SFT is still
+      free for jobs started before Dec 1, and current deployment pricing. If any differs, stop and report.
 - [ ] `scripts/train_glimmer.py`: Fireworks serverless training, `muse-glimmer-30b` + LoRA rank 8,
       SFT (free for jobs started before Dec 1). Follow `github.com/fw-ai/cookbook` SFT router notebook.
 - [ ] Eval: exact-match accuracy of base Glimmer vs tuned Glimmer vs Muse Spark Open judge, same
@@ -255,7 +291,8 @@ Steps:
 | Judge | Muse Spark Open → **tuned Muse Glimmer 30B** (M9) | Fireworks | rules first |
 
 Provider ids: Fireworks `accounts/fireworks/models/muse-spark-open` · Baseten `meta-models/muse-spark-open-1026`
-· Glimmer training base `accounts/fireworks/models/muse-glimmer-30b` (training only, not serverless).
+· Glimmer training base `accounts/fireworks/models/muse-glimmer-30b` (training only, not serverless) —
+source: Fireworks Oct 30 workshop deck; verify before M9.
 
 ## 5. Prize map
 
@@ -280,15 +317,21 @@ Provider ids: Fireworks `accounts/fireworks/models/muse-spark-open` · Baseten `
 - 0:05 Phone films laptop: promo applied twice, "the total just went negative."
 - 0:15 Upload → timeline lights up with "model · provider · effort" badges.
 - 0:50 First test passes → judge: NOT_REPRODUCED, "never applied promo twice" → retry.
-- 1:15 Second test fails red: `expected total >= 0, got -12.40` → REPRODUCED. SAM evidence box.
+- 1:15 Second test fails red (show the **real** failure line from the recorded run) → REPRODUCED. SAM evidence box.
 - 1:35 "Run against fixed build" → green. "Every bug report becomes a regression test."
 - 1:50 Second bug, sped up.
-- 2:10 Under the hood: effort chart ("low effort was best for us — measured") and, if M9 done,
+- 2:10 Under the hood: effort chart ("on our 3 bugs, low effort reproduced N/9 at the lowest cost") and, if M9 done,
   "we trained Muse Glimmer into our judge: X% → Y% on bugs it never saw."
 - 2:40 Architecture: Voice Transcribe · Muse Spark · SAM 3.1 · Muse Spark Open · Glimmer.
 - 2:50 Who it's for + next: CI integration, native mobile.
 
-## 8. First prompt to give Claude Code
+## 8. Next prompt to give Claude Code (M1 is done)
+
+> Read the v2.1 changes at the top of BUILD_PLAN.md. M1 is committed. Start M2, beginning with
+> `scripts/preflight.py` and `docs/preflight.md`, then media + transcription. Stop after preflight
+> and show me the table before continuing.
+
+## (Original first prompt)
 
 > Read CLAUDE.md and BUILD_PLAN.md (v2). Start M1: build the Lumen & Loom practice store in
 > `store/` with the 3 demo bugs behind a bug registry and the `?fixed=1` toggle, plus hand-written

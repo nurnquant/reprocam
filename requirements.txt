@@ -9,3 +9,4 @@ uvicorn[standard]>=0.29
 python-multipart>=0.0.9
 pytest>=8
 pytest-playwright>=0.5
+pillow>=10
