@@ -65,6 +65,10 @@ replays cost $0.
   agree with each other. On bug2 it got there on the retry, but with a weak form: an if/else on the basket count
   with a hard-coded `$18.50`, not a computed quantity × price. It fails on the buggy build and passes on the
   fixed one, yet a price change would break it. One run each, so no claim of reliability yet.
+- **Understanding is right about 2 runs in 3.** On our 3 bugs, the default understand prompt (v1) got each
+  bug's key steps right in 6 of 9 runs (bug1 2/3, bug2 1/3, bug3 3/3), from the same frames each time. The main
+  miss: dropping a product id from the start page. A variant that keeps it fixed that, but more often mislabels the
+  recording as "not the app" (`docs/understand_stability.md`).
 - **Expected behaviour is the tester's guess.** Without a known-good build there is nothing to check the claim's
   `expected` against; such runs end "REPRODUCED · not verified".
 - **SAM finds things, not meanings.** "order total" returns no boxes; "price" returns every price. Muse Spark picks
