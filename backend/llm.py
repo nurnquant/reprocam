@@ -83,7 +83,12 @@ def chat(messages: list[dict], *, stage: str, provider: str | None = None, effor
         "finish_reason": r.choices[0].finish_reason,
     }
     meta["cost_usd"] = cost_estimate(provider, meta["prompt_tokens"] or 0, meta["completion_tokens"] or 0)
+    log_call(meta)
+    return r.choices[0].message.content or "", meta
+
+
+def log_call(row: dict) -> None:
+    """Append one model call to data/llm_calls.jsonl (also used for SAM calls)."""
     CALL_LOG.parent.mkdir(exist_ok=True)
     with CALL_LOG.open("a") as f:
-        f.write(json.dumps({"ts": round(time.time(), 1), **meta}) + "\n")
-    return r.choices[0].message.content or "", meta
+        f.write(json.dumps({"ts": round(time.time(), 1), **row}, default=str) + "\n")

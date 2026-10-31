@@ -45,8 +45,8 @@ class Run:
         self.events.write_text("")
         self.calls: list[dict] = []
 
-    def emit(self, stage, status, detail, meta=None, attempt=None, artifact=None):
-        if meta and status != "start":
+    def emit(self, stage, status, detail, meta=None, attempt=None, artifact=None, record=True):
+        if meta and record and status != "start":
             self.calls.append(meta)
         event = {"t": round(time.time() - self.started, 2), "stage": stage, "status": status,
                  "model": meta and meta.get("model"), "provider": meta and meta.get("provider"),
@@ -89,13 +89,13 @@ def make_evidence(run: Run, run_dir: Path, from_steps: bool):
     except Exception as e:  # noqa: BLE001
         run.emit("segment", "fail", f"no evidence image: {e.__class__.__name__}: {str(e)[:120]}")
         return
-    for c in r["calls"]:
-        if c.get("model") != "sam-3.1":
-            run.calls.append(c)
+    run.calls.extend(r["tried"] + r["calls"])  # SAM requests (frames processed) + Muse Spark pick/locate
     tried = ", ".join(f"'{t['concept']}' {t['on_bug_frame']}" for t in r["tried"])
-    run.emit("segment", "ok", f"{r['method']} (SAM boxes on bug frame: {tried})",
-             {"model": "sam-3.1", "provider": "meta", "effort": None, "stage": "segment", "cost_usd": None},
-             artifact=run_dir / "evidence.png")
+    frames = sum(t["frames_processed"] or 0 for t in r["tried"])
+    run.emit("segment", "ok", f"{r['method']} · SAM {r['sam_mode']} mode, boxes on bug frame: {tried}; "
+             f"{frames} frame(s) processed",
+             {"model": "sam-3.1", "provider": "meta", "effort": None},
+             artifact=run_dir / "evidence.png", record=False)  # calls already recorded above
 
 
 def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False) -> dict:
@@ -185,8 +185,9 @@ def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False
 
     final = final or {"verdict": verdict["verdict"], "attempt": MAX_ATTEMPTS, "fixcheck": None}
     final.update(run_id=run_id, bug_id=bug_id, seconds=round(time.time() - run.started, 1), cost_usd=run.cost(),
-                 model_calls=[{k: c.get(k) for k in ("stage", "provider", "effort", "prompt_tokens",
-                                                     "completion_tokens", "cost_usd")} for c in run.calls])
+                 model_calls=[{k: c.get(k) for k in ("stage", "model", "provider", "effort", "prompt_tokens",
+                                                     "completion_tokens", "frames_processed", "cost_usd")
+                              if c.get(k) is not None} for c in run.calls])
     (run_dir / "result.json").write_text(json.dumps(final, indent=2))
     return final
 

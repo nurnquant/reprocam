@@ -8,7 +8,10 @@ Film a bug, say what went wrong, get a failing Playwright test that proves it.
 ## Meta models used
 - **Muse Voice Transcribe** — narration to text
 - **Muse Spark / Muse Spark Open** (Meta API, Baseten, Fireworks) — understands frames, plans steps, writes the test
-- **SAM 3.1** — finds and tracks the broken UI element across the video
+- **SAM 3.1** — finds the broken UI element on the bug frame (video tracking optional)
+
+SAM proposes, Muse Spark decides: SAM 3.1 boxes the candidate elements (every price on the screen),
+and Muse Spark picks the one the tester's claim is about.
 
 ## Layout
 - `store/`   practice web shop with planted bugs (the app under test)

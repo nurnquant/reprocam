@@ -1,19 +1,21 @@
-"""SAM 3.1: find the broken element in the video and draw it on the bug frame -> evidence.png.
+"""SAM 3.1: find the broken element on the bug frame -> evidence.png ("SAM proposes, Muse Spark decides").
 
-    python -m backend.segment runs/bug1 [--concept "order total" --concept discount ...]
+    python -m backend.segment runs/bug1 [--concept "order total" --concept price ...] [--no-sam]
 
 Request and stream handling are ported from the Meta cookbook (07_sam/01_api_basics/python/
-sam_api.py): upload an MP4 with purpose=user_data, stream a Responses call to sam-3.1 with one
-noun phrase, parse ONLY with meta_sam_parser. The video is re-encoded at a fixed 5 fps and
-1280 px wide, so SAM's frame_index maps to time as t = frame_index / 5 and boxes share the
-keyframes' pixel scale.
+sam_api.py): one noun phrase per Responses call to sam-3.1, parsed ONLY with meta_sam_parser.
+
+Default: image mode, on the keyframe at bug_claim.frame_ref (1 frame per request).
+SAM_VIDEO_TRACK=1: video mode instead (for a tracking animation later): the recording is
+re-encoded at 5 fps / 1280 px, uploaded with purpose=user_data, and the boxes nearest the bug
+frame's time are used. Every SAM request is logged to data/llm_calls.jsonl with frames processed.
 
 SAM finds UI objects (buttons, prices) well but not meanings ("order total" returns nothing,
 "price" returns every price). So:
   1. try the claim's element, then generic concepts, until SAM has boxes on the bug frame;
   2. one box -> done; several -> Muse Spark picks one from a numbered overlay;
-  3. no boxes at all -> fallback: Muse Spark returns a box itself.
-evidence.png and segment.json always say which model produced the box.
+  3. no boxes at all -> fallback: Muse Spark returns a box itself (0-1000 scale on both axes).
+All boxes are in the bug frame's pixels. evidence.png and segment.json say which model drew it.
 """
 import asyncio
 import base64
@@ -27,11 +29,11 @@ from contextlib import aclosing
 from pathlib import Path
 
 from dotenv import load_dotenv
-from meta_sam_parser import parse_responses_stream, video_segmentation_format
+from meta_sam_parser import image_segmentation_format, parse_responses_stream, video_segmentation_format
 from openai import AsyncOpenAI
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont, ImageStat
 
-from backend.llm import chat
+from backend.llm import chat, log_call
 
 load_dotenv()
 
@@ -88,29 +90,52 @@ async def _events(stream, usage: dict):
                    "text": part["text"]}
 
 
-async def segment_video(file_id: str, concept: str) -> tuple[list[dict], dict]:
-    """Boxes [{object_id, frame, t, left, top, right, bottom, confidence}] and call info."""
+async def _sam(concept: str, media: dict, fmt) -> tuple[object, dict, float]:
     usage, started = {}, time.time()
     async with _client() as api:
         stream = await api.responses.create(model=MODEL, stream=True, input=[{
-            "type": "message", "role": "user",
-            "content": [{"type": "input_text", "text": concept}, {"type": "input_video", "file_id": file_id}]}])
+            "type": "message", "role": "user", "content": [{"type": "input_text", "text": concept}, media]}])
         async with stream, aclosing(_events(stream, usage)) as events:
-            parsed = parse_responses_stream(events, video_segmentation_format())
+            parsed = parse_responses_stream(events, fmt)
             async with parsed:
                 async for _ in parsed:
                     pass
                 result = await parsed.final_result()
     if result.outcome.status != "completed":
         raise RuntimeError(f"SAM incomplete: {getattr(result.outcome, 'reason', '?')}")
-    boxes = [{"object_id": r.object_id, "frame": r.frame.frame_index if r.frame else None,
-              "t": r.frame.frame_index / FPS if r.frame else None,
-              "left": r.left, "top": r.top, "right": r.right, "bottom": r.bottom, "confidence": r.confidence}
-             for r in result.records if r.kind == "box"]
-    info = {"model": MODEL, "provider": "meta", "concept": concept, "media": result.media,
-            "usage": usage, "latency_s": round(time.time() - started, 1),
-            "errors": [d.message for d in result.diagnostics if d.severity == "error"]}
-    return boxes, info
+    return result, usage, round(time.time() - started, 1)
+
+
+def _log_sam(concept: str, mode: str, usage: dict, latency_s: float, boxes: int) -> dict:
+    info = {"stage": "segment", "model": MODEL, "provider": "meta", "effort": None, "mode": mode,
+            "concept": concept, "frames_processed": usage.get("video_frames_processed", 1 if mode == "image" else None),
+            "boxes": boxes, "latency_s": latency_s, "cost_usd": None}
+    log_call(info)
+    return info
+
+
+def _box(r, scale_x: float = 1.0, scale_y: float = 1.0, fps: int | None = None) -> dict:
+    return {"object_id": r.object_id, "frame": r.frame.frame_index if r.frame else None,
+            "t": r.frame.frame_index / fps if (r.frame and fps) else None,
+            "left": r.left * scale_x, "top": r.top * scale_y, "right": r.right * scale_x,
+            "bottom": r.bottom * scale_y, "confidence": r.confidence}
+
+
+async def segment_image(frame_path: Path, concept: str) -> tuple[list[dict], dict]:
+    """Boxes in the frame's pixels, and the logged call info."""
+    url = "data:image/jpeg;base64," + base64.b64encode(frame_path.read_bytes()).decode()
+    result, usage, latency = await _sam(concept, {"type": "input_image", "image_url": url}, image_segmentation_format())
+    boxes = [_box(r) for r in result.records if r.kind == "box"]
+    return boxes, _log_sam(concept, "image", usage, latency, len(boxes))
+
+
+async def segment_video(file_id: str, concept: str, frame_size: tuple[int, int]) -> tuple[list[dict], dict]:
+    """Boxes for every tracked frame, scaled to frame_size (the keyframes' pixels)."""
+    result, usage, latency = await _sam(concept, {"type": "input_video", "file_id": file_id},
+                                        video_segmentation_format())
+    sx = frame_size[0] / WIDTH
+    boxes = [_box(r, sx, sx, FPS) for r in result.records if r.kind == "box"]
+    return boxes, _log_sam(concept, "video", usage, latency, len(boxes))
 
 
 def boxes_near(boxes: list[dict], t: float) -> list[dict]:
@@ -122,18 +147,60 @@ def boxes_near(boxes: list[dict], t: float) -> list[dict]:
     return [b for b in timed if b["t"] == nearest]
 
 
-def draw_evidence(frame_path: Path, boxes: list[dict], out: Path, label: str,
-                  source_size: tuple[int, int] | None = None) -> Path:
+RED = (230, 30, 60)
+
+
+def _blank(gray: Image.Image, rect: tuple[float, float, float, float], margin: int = 3) -> bool:
+    """True if rect (plus a small margin) is inside the image and every pixel is within 12 grey
+    levels of the area's median: no text, and no thin edges such as a panel border."""
+    x0, y0, x1, y1 = (round(v) for v in rect)
+    x0, y0, x1, y1 = x0 - margin, y0 - margin, x1 + margin, y1 + margin
+    if x0 < 0 or y0 < 0 or x1 > gray.width or y1 > gray.height:
+        return False
+    area = gray.crop((x0, y0, x1, y1))
+    hist, half, seen = area.histogram(), area.width * area.height // 2, 0
+    median = next(v for v in range(256) if (seen := seen + hist[v]) > half)
+    lo, hi = ImageStat.Stat(area).extrema[0]
+    return median - lo <= 12 and hi - median <= 12
+
+
+def place_label(gray: Image.Image, box: tuple[float, float, float, float], size: tuple[int, int],
+                gap: int = 8) -> tuple[float, float]:
+    """Top-left corner for a label that covers no page text: above the box first, then beside or
+    below it, then further out (e.g. outside the panel the element sits in)."""
+    x0, y0, x1, y1 = box
+    w, h = size
+    cy = (y0 + y1) / 2 - h / 2
+    near = [(x1 - w, y0 - gap - h), (x0, y0 - gap - h), (x1 + gap, cy), (x0 - gap - w, cy),
+            (x1 - w, y1 + gap), (x0, y1 + gap)]
+    for x, y in near:
+        if _blank(gray, (x, y, x + w, y + h)):
+            return x, y
+    for d in range(gap + 16, max(gray.width, gray.height), 16):  # widen the search: outside the panel
+        for x, y in [(x1 + d, cy), (x0 - d - w, cy), (x1 - w, y0 - d - h), (x1 - w, y1 + d)]:
+            if _blank(gray, (x, y, x + w, y + h)):
+                return x, y
+    return max(0, x1 - w), max(0, y0 - gap - h)  # nothing blank: least bad, still above the box
+
+
+def draw_evidence(frame_path: Path, box: dict, out: Path, label: str) -> Path:
     img = Image.open(frame_path).convert("RGB")
-    sx = img.width / source_size[0] if source_size else 1.0
-    sy = img.height / source_size[1] if source_size else 1.0
+    gray = img.convert("L")
     draw = ImageDraw.Draw(img)
-    for b in boxes:
-        x0, y0, x1, y1 = b["left"] * sx, b["top"] * sy, b["right"] * sx, b["bottom"] * sy
-        pad = 6
-        draw.rectangle((x0 - pad, y0 - pad, x1 + pad, y1 + pad), outline=(230, 30, 60), width=4)
-        draw.rectangle((x0 - pad, y0 - pad - 22, x0 - pad + 8 + 7 * len(label), y0 - pad), fill=(230, 30, 60))
-        draw.text((x0 - pad + 4, y0 - pad - 19), label, fill="white")
+    pad = 6
+    rect = (box["left"] - pad, box["top"] - pad, box["right"] + pad, box["bottom"] + pad)
+    font = ImageFont.load_default(size=15)
+    tx0, ty0, tx1, ty1 = draw.textbbox((0, 0), label, font=font)
+    w, h = tx1 - tx0 + 12, ty1 - ty0 + 10
+    lx, ly = place_label(gray, rect, (w, h))
+
+    draw.rectangle(rect, outline=RED, width=4)
+    # leader line when the label is not touching the box
+    if not (rect[0] - w - 10 <= lx <= rect[2] + 10 and rect[1] - h - 10 <= ly <= rect[3] + 10):
+        cx = min(max(lx + w / 2, rect[0]), rect[2])
+        draw.line((lx + w / 2, ly + h / 2, cx, rect[1] if ly < rect[1] else rect[3]), fill=RED, width=2)
+    draw.rectangle((lx, ly, lx + w, ly + h), fill=RED)
+    draw.text((lx + 6 - tx0, ly + 5 - ty0), label, fill="white", font=font)
     img.save(out)
     return out
 
@@ -147,12 +214,11 @@ def _jpeg_url(img: Image.Image) -> str:
 def pick_box(frame_path: Path, boxes: list[dict], claim: dict) -> tuple[int, str, dict]:
     """Muse Spark picks which numbered SAM box is the claimed element."""
     img = Image.open(frame_path).convert("RGB")
-    sx = img.width / WIDTH
     draw = ImageDraw.Draw(img)
+    font = ImageFont.load_default(size=14)
     for i, b in enumerate(boxes):
-        draw.rectangle((b["left"] * sx - 4, b["top"] * sx - 4, b["right"] * sx + 4, b["bottom"] * sx + 4),
-                       outline=(230, 30, 60), width=3)
-        draw.text((b["right"] * sx + 8, b["top"] * sx - 2), str(i), fill=(230, 30, 60))
+        draw.rectangle((b["left"] - 4, b["top"] - 4, b["right"] + 4, b["bottom"] + 4), outline=RED, width=3)
+        draw.text((b["right"] + 8, b["top"] - 3), str(i), fill=RED, font=font)
     schema = {"type": "json_schema", "json_schema": {"name": "pick", "strict": True, "schema": {
         "type": "object", "additionalProperties": False, "required": ["index", "reason"],
         "properties": {"index": {"type": "integer", "enum": list(range(len(boxes)))}, "reason": {"type": "string"}}}}}
@@ -165,7 +231,7 @@ def pick_box(frame_path: Path, boxes: list[dict], claim: dict) -> tuple[int, str
 
 
 def locate_box(frame_path: Path, claim: dict) -> tuple[dict, dict]:
-    """Fallback when SAM finds nothing: Muse Spark returns the box in image pixels."""
+    """Fallback when SAM finds nothing: Muse Spark returns a box (0-1000 scale), converted to pixels."""
     img = Image.open(frame_path).convert("RGB")
     coord = {"type": "integer", "minimum": 0, "maximum": 1000}
     schema = {"type": "json_schema", "json_schema": {"name": "box", "strict": True, "schema": {
@@ -193,16 +259,21 @@ async def evidence(run_dir: Path, concepts: list[str] | None = None, use_sam: bo
     concepts = concepts or [claim["element"]] + [c for c in GENERIC_CONCEPTS if c != claim["element"]]
     report = {"frame": frame, "tried": [], "calls": []}
 
+    video_mode = os.getenv("SAM_VIDEO_TRACK") == "1"
+    report["sam_mode"] = "video" if video_mode else "image"
     near = []
     if use_sam:
-        mp4 = to_mp4(Path(frames["video"]), run_dir / "sam_input.mp4")
-        file_id = await upload(mp4)
+        if video_mode:
+            size = Image.open(frame_path).size
+            file_id = await upload(to_mp4(Path(frames["video"]), run_dir / "sam_input.mp4"))
         for concept in concepts:
-            boxes, info = await segment_video(file_id, concept)
-            near = boxes_near(boxes, frame["t"])
-            report["tried"].append({"concept": concept, "boxes": len(boxes), "on_bug_frame": len(near),
-                                    "latency_s": info["latency_s"], "usage": info["usage"]})
-            report["calls"].append(info)
+            if video_mode:
+                boxes, info = await segment_video(file_id, concept, size)
+                report.setdefault("tracks", {})[concept] = boxes  # every frame, for an animation later
+                near = boxes_near(boxes, frame["t"])
+            else:
+                near, info = await segment_image(frame_path, concept)
+            report["tried"].append({**info, "on_bug_frame": len(near)})
             if near:
                 report["concept"] = concept
                 break
@@ -218,11 +289,8 @@ async def evidence(run_dir: Path, concepts: list[str] | None = None, use_sam: bo
         chosen, meta = locate_box(frame_path, claim)
         method = "Muse Spark box (SAM found nothing)" if use_sam else "Muse Spark box"
         report["calls"].append(meta)
-        chosen["source_size"] = None
 
-    img_w = Image.open(frame_path).width
-    source = None if chosen.get("object_id") == "muse" else (WIDTH, round(WIDTH * Image.open(frame_path).height / img_w))
-    draw_evidence(frame_path, [chosen], run_dir / "evidence.png", f"{claim['element']} · {method}", source)
+    draw_evidence(frame_path, chosen, run_dir / "evidence.png", f"{claim['element']} · {method}")
     report.update(method=method, box=chosen, evidence="evidence.png")
     (run_dir / "segment.json").write_text(json.dumps(report, indent=2, default=str))
     return report
@@ -236,7 +304,7 @@ if __name__ == "__main__":
     r = asyncio.run(evidence(Path(args[0]), concepts or None, use_sam="--no-sam" not in args))
     for t in r["tried"]:
         print(f"  SAM '{t['concept']}': {t['boxes']} boxes, {t['on_bug_frame']} on bug frame, {t['latency_s']}s, "
-              f"frames processed {t['usage'].get('video_frames_processed')}")
+              f"{t['mode']} mode, frames processed {t['frames_processed']}")
     if "picked" in r:
         print(f"  Muse Spark picked #{r['picked']} of {len(r['candidates'])}: {r['pick_reason']}")
     b = r["box"]
