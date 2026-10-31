@@ -1,8 +1,8 @@
 {
-  "sessionId": "voyager/transcribe/EE7AB3FA66D24668BEFD42A0F0306F8D",
-  "transcript": "twenty seven dollar add to basket basket view basket so applying GLOW20 as a code discount code apply applying it again GLOW20 apply now it went to negative",
+  "sessionId": "voyager/transcribe/406F8E05FCEE436F822E08B370651FDD",
+  "transcript": "twenty seven dollar, add to basket, view basket, so applying GLOW20 as a code discount code apply applying it again GLOW20 apply now it went to negative",
   "audioDurationMs": 48800,
   "turns": [],
   "model": "muse-voice-transcribe-1.0",
-  "latency_s": 6.52
+  "latency_s": 6.59
 }

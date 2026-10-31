@@ -9,8 +9,9 @@ from pathlib import Path
 from backend.runner import failure_summary
 
 
-def write_ticket(run_dir: Path, attempt_dir: Path, buggy: dict, fixed: dict, verdict: dict,
+def write_ticket(run_dir: Path, attempt_dir: Path, buggy: dict, good: dict | None, verdict: dict,
                  run_info: dict) -> Path:
+    """good: the same test on the known-good build, or None when no known-good build was given."""
     steps = json.loads((run_dir / "steps.json").read_text())
     claim = steps["bug_claim"]
     code = (attempt_dir / "test_repro.py").read_text()
@@ -20,8 +21,10 @@ def write_ticket(run_dir: Path, attempt_dir: Path, buggy: dict, fixed: dict, ver
     lines = [
         f"# {claim['summary']}",
         "",
-        f"**Status:** reproduced by an automated test · **Fixed build:** "
-        f"{'test passes' if fixed['outcome'] == 'pass' else 'test still fails: ' + failure_summary(fixed.get('message'))}",
+        f"**Status:** {run_info['label']}",
+        (f"**Known-good build:** {run_info['known_good']}: " +
+         ("test passes" if good["outcome"] == "pass" else "test also fails: " + failure_summary(good.get("message")))
+         if good else "**Known-good build:** none given, so the test was not checked where the bug is fixed"),
         f"**App:** {steps['app_url']} · **Run:** `{run_info['run_id']}` · **Attempts:** {run_info['attempt']}",
         "",
         "## Steps to reproduce",
@@ -45,7 +48,7 @@ def write_ticket(run_dir: Path, attempt_dir: Path, buggy: dict, fixed: dict, ver
         code.rstrip(),
         "```",
         "",
-        "Run it: `APP_URL=<app> REPRO_FIXED=0 pytest test_repro.py` (set `REPRO_FIXED=1` for the fixed build).",
+        "Run it: `APP_URL=<app> REPRO_FIXED=0 pytest test_repro.py` (`REPRO_FIXED=1` on the practice store's fixed build).",
         "",
         f"*Filed by ReproCam · models: {', '.join(run_info['models'])}*",
     ]

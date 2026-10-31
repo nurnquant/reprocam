@@ -52,6 +52,8 @@ python -m backend.api        # http://localhost:8000 (also serves the store on :
 - **Try a sample bug** replays a cached run with its original timing, at $0.
 - **Upload video** starts a live run (25 MB / 90 s max; daily and per-visitor caps in `.env`).
 - **Run against fixed build** re-runs the reproducing test on `?fixed=1` (Playwright only, no model calls).
+- **Known-good build** (optional, `KNOWN_GOOD_URL` or `--known-good fixed`): the test must also pass on a
+  build without the bug, or it's retried; a run that never passes there ends *REPRODUCED · NOT CONFIRMED*.
 
 Cache a finished run as a sample: `python scripts/cache_sample.py bug1`.
 

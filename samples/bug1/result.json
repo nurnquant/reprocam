@@ -1,13 +1,17 @@
 {
   "verdict": "REPRODUCED",
   "attempt": 1,
+  "confirmed": true,
+  "known_good": "fixed build (?fixed=1)",
   "fixcheck": "pass",
   "test": "attempt_1/test_repro.py",
-  "failure": "assert_fail (builtins.AssertionError): discount should remain -$20.00 and not stack to -$40.00 on second apply\nExpected value: '-$20.00'\nActual value: -$40.00 \nCall log:\n  - Expect \"to_have_text\" get_by_test_id(\"cart\").get_by_test_id(\"discount-total\") with timeout 5000ms\n  - waiting for get_by_test_id(\"cart\").get_by_test_id(\"discount-total\")\n    14 \u00d7 locator resolved to <dd data-testid=\"discount-total\">-$40.00</dd>\n       - unexpected value \"-$40.00\"\n\nAria snapshot:\n- definition: \"-$40.00\"",
-  "run_id": "bug1-1793470636",
+  "failure": "assert_fail (builtins.AssertionError): discount should remain -$20.00 after second apply of same code\nExpected value: '-$20.00'\nActual value: -$40.00 \nCall log:\n  - Expect \"to_have_text\" get_by_test_id(\"discount-total\") with timeout 5000ms\n  - waiting for get_by_test_id(\"discount-total\")\n    14 \u00d7 locator resolved to <dd data-testid=\"discount-total\">-$40.00</dd>\n       - unexpected value \"-$40.00\"\n\nAria snapshot:\n- definition: \"-$40.00\"",
+  "label": "REPRODUCED \u00b7 verified against known-good build",
+  "tone": "good",
+  "run_id": "bug1-1793475489",
   "bug_id": "neg_total",
-  "seconds": 73.7,
-  "cost_usd": 0.0378,
+  "seconds": 59.5,
+  "cost_usd": 0.0365,
   "model_calls": [
     {
       "stage": "transcribe",
@@ -19,27 +23,27 @@
       "model": "accounts/fireworks/models/muse-spark-open",
       "provider": "fireworks",
       "effort": "low",
-      "prompt_tokens": 16938,
-      "completion_tokens": 666,
-      "cost_usd": 0.024003
+      "prompt_tokens": 16940,
+      "completion_tokens": 833,
+      "cost_usd": 0.024715
     },
     {
       "stage": "testgen",
       "model": "accounts/fireworks/models/muse-spark-open",
       "provider": "fireworks",
       "effort": "low",
-      "prompt_tokens": 2518,
-      "completion_tokens": 1102,
-      "cost_usd": 0.007831
+      "prompt_tokens": 2734,
+      "completion_tokens": 589,
+      "cost_usd": 0.005921
     },
     {
       "stage": "judge",
       "model": "accounts/fireworks/models/muse-spark-open",
       "provider": "fireworks",
       "effort": "low",
-      "prompt_tokens": 1333,
-      "completion_tokens": 369,
-      "cost_usd": 0.003234
+      "prompt_tokens": 1376,
+      "completion_tokens": 257,
+      "cost_usd": 0.002812
     },
     {
       "stage": "segment",
@@ -58,9 +62,9 @@
       "model": "accounts/fireworks/models/muse-spark-open",
       "provider": "fireworks",
       "effort": "low",
-      "prompt_tokens": 1407,
-      "completion_tokens": 222,
-      "cost_usd": 0.002702
+      "prompt_tokens": 1399,
+      "completion_tokens": 306,
+      "cost_usd": 0.003049
     }
   ]
 }

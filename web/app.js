@@ -16,7 +16,7 @@ const STAGES = {
   testgen: "Write the test",
   run: "Run on the buggy build",
   judge: "Judge the failure",
-  fixcheck: "Run on the fixed build",
+  fixcheck: "Run on the known-good build",
   segment: "Find the broken element",
   ticket: "File the ticket",
   error: "Run stopped",
@@ -218,15 +218,22 @@ async function onEvent(e) {
   if (e.stage === "ticket" && e.status === "ok" && s.ticket_md) renderTicket(s);
 }
 
+function outcome(result) {
+  if (result.label) return [result.label, result.tone];
+  if (result.verdict !== "REPRODUCED") return [`${(result.verdict || "error").replaceAll("_", " ")}${result.error ? ` · ${result.error}` : ""}`, "bad"];
+  // results cached before labels existed
+  if (result.fixcheck === "pass") return ["REPRODUCED · verified against known-good build", "good"];
+  if (result.fixcheck) return ["REPRODUCED · NOT CONFIRMED (also fails on fixed build)", "warn"];
+  return ["REPRODUCED · not verified (no known-good build given)", "good"];
+}
+
 function onDone(result) {
   clearInterval(state.timer);
   state.timer = null;
   const v = $("verdict");
-  const ok = result.verdict === "REPRODUCED";
-  v.textContent = ok
-    ? `Reproduced · attempt ${result.attempt} · fixed build ${result.fixcheck === "pass" ? "passes" : "fails"}`
-    : `${(result.verdict || "error").replaceAll("_", " ")}${result.error ? ` · ${result.error}` : ""}`;
-  v.classList.toggle("bad", !ok);
+  const [label, tone] = outcome(result);
+  v.textContent = `${label} · attempt ${result.attempt ?? "–"}`;
+  v.className = `verdict ${tone}`;
   v.hidden = false;
   $("fix-btn").disabled = !result.test;
   const cost = result.cost_usd != null ? `$${result.cost_usd.toFixed(4)} model cost` : "model cost n/a";

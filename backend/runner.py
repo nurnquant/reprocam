@@ -10,12 +10,15 @@ failure, which is what the judge's rules need:
   error        anything else: syntax/import/collection errors, fixture errors, action timeouts
                (playwright TimeoutError from page.click etc.), selector errors, the 60 s limit
 """
+import inspect
 import json
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+from backend.testgen import check_goto_url
 
 TIMEOUT_S = 60
 REPO = str(Path(__file__).resolve().parent.parent)
@@ -28,7 +31,29 @@ def _scrub(text: str) -> str:
 
 PLUGIN = '''
 import json
+import os
+from urllib.parse import parse_qsl, urlsplit
+
 import pytest
+
+
+class GotoGuardError(Exception):
+    """A page.goto URL without exactly one fixed=REPRO_FIXED (or with a hand-built query)."""
+
+
+@pytest.fixture(autouse=True)
+def _goto_guard(page):
+    """Check every navigation at run time too: the build flag must be right or the run means nothing."""
+    original, fixed = page.goto, os.environ.get("REPRO_FIXED", "0")
+
+    def goto(url, *args, **kwargs):
+        problem = check_goto_url(url, fixed)
+        if problem:
+            raise GotoGuardError(problem)
+        return original(url, *args, **kwargs)
+
+    page.goto = goto
+    yield
 
 RESULT = {"outcome": "error", "phase": None, "exc_type": None, "message": "no test ran"}
 _done = False
@@ -63,7 +88,8 @@ def pytest_runtest_makereport(item, call):
 def pytest_sessionfinish(session):
     with open("result.json", "w") as f:
         json.dump(RESULT, f)
-'''
+
+''' + inspect.getsource(check_goto_url)
 
 
 def failure_summary(message: str | None) -> str:

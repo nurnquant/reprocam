@@ -23,7 +23,7 @@ RETRY_STATUS = {429, 500, 502, 503, 504}
 
 STORE_APP = Path(__file__).resolve().parent.parent / "store" / "app.js"
 DOMAIN_WORDS = ["Lumen & Loom", "promo", "promo code", "GLOW20", "basket", "checkout",
-                "ZIP", "ZIP code", "place order", "quantity", "subtotal", "total"]
+                "ZIP", "ZIP code", "place order", "quantity", "one", "minus", "plus", "subtotal", "total"]
 
 
 class TranscribeError(RuntimeError):

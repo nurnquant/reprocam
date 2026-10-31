@@ -14,7 +14,7 @@
       "concept": "order total",
       "frames_processed": 1,
       "boxes": 0,
-      "latency_s": 3.3,
+      "latency_s": 1.8,
       "cost_usd": null,
       "on_bug_frame": 0
     },
@@ -27,7 +27,7 @@
       "concept": "price",
       "frames_processed": 1,
       "boxes": 4,
-      "latency_s": 2.0,
+      "latency_s": 0.8,
       "cost_usd": null,
       "on_bug_frame": 4
     }
@@ -38,12 +38,12 @@
       "model": "accounts/fireworks/models/muse-spark-open",
       "provider": "fireworks",
       "effort": "low",
-      "prompt_tokens": 1407,
-      "completion_tokens": 222,
-      "reasoning_tokens": 145,
-      "latency_s": 4.01,
+      "prompt_tokens": 1399,
+      "completion_tokens": 306,
+      "reasoning_tokens": 235,
+      "latency_s": 4.45,
       "finish_reason": "stop",
-      "cost_usd": 0.002702
+      "cost_usd": 0.003049
     }
   ],
   "sam_mode": "image",
@@ -91,7 +91,7 @@
     }
   ],
   "picked": 1,
-  "pick_reason": "Box 1 marks the 'Total' line in the order summary card at the bottom right. It shows value '-$12.40' which matches the described bugged total after the second GLOW20 application (Subtotal $27.60 with -$40.00 Discount).",
+  "pick_reason": "Box 1 marks the 'Total' line value '-$12.40' in the order summary card (below Subtotal/Discount/Shipping), showing the stacked discount result with 'GLOW20 applied: $20.00 off.' above.",
   "method": "SAM 3.1 + Muse Spark pick",
   "box": {
     "object_id": "1",

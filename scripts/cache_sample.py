@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 KEEP = ["events.jsonl", "result.json", "steps.json", "frames.json", "transcript.json", "understand_meta.json",
         "segment.json", "evidence.png", "ticket.md"]
-KEEP_ATTEMPT = ["test_repro.py", "verdict.json", "buggy/result.json", "fixed/result.json"]
+KEEP_ATTEMPT = ["test_repro.py", "verdict.json", "buggy/result.json", "known_good/result.json"]
 
 
 def main():
@@ -44,7 +44,7 @@ def main():
             if (attempt / name).exists():
                 (dst / attempt.name / name).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(attempt / name, dst / attempt.name / name)
-        for build in ("buggy", "fixed"):  # final screenshot of each run
+        for build in ("buggy", "known_good"):  # final screenshot of each run
             shots = sorted((attempt / build / "artifacts").rglob("*.png"))
             if shots:
                 shutil.copy2(shots[-1], dst / attempt.name / build / "screenshot.png")

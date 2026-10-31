@@ -30,6 +30,10 @@ from backend.understand import understand
 ROOT = Path(__file__).resolve().parent.parent
 JUDGE_LOG = ROOT / "data" / "judge_log.jsonl"
 MAX_ATTEMPTS = 3
+KNOWN_GOOD_FEEDBACK = ("Your expected behavior is wrong: it also fails on a build where the bug is fixed; re-read "
+                       "the claim. On that build the test saw: {seen}. What the known-good build shows is correct "
+                       "behaviour, so assert something that holds there and still fails on the buggy build (the "
+                       "tester's symptom). The claim's 'expected' is the tester's guess at the fix and may be wrong.")
 # Sample videos whose bug is known, so judge log rows carry a bug id (None for real uploads).
 SAMPLE_BUGS = {"bug1": "neg_total", "bug2": "qty_stepper", "bug3": "zip_hang"}
 
@@ -61,6 +65,28 @@ class Run:
     def cost(self) -> float | None:
         known = [c["cost_usd"] for c in self.calls if c.get("cost_usd") is not None]
         return round(sum(known), 4) if known else None
+
+
+def known_good_target(spec: str | None, app_url: str) -> tuple[str, str] | None:
+    """Optional known-good build: 'fixed' = the practice store's ?fixed=1, or a URL of a build that
+    works (e.g. the last release). None = off. Returns (app url, label)."""
+    if not spec:
+        return None
+    if spec == "fixed":
+        return app_url, "fixed build (?fixed=1)"
+    return spec.rstrip("/"), f"known-good build ({spec})"
+
+
+def outcome_label(final: dict) -> tuple[str, str]:
+    """(label, tone) shown in the CLI, the UI and the ticket. tone: good | warn | bad."""
+    if final["verdict"] != "REPRODUCED":
+        return final["verdict"].replace("_", " "), "bad"
+    build = "fixed build" if (final.get("known_good") or "").startswith("fixed") else "known-good build"
+    if final.get("confirmed") is True:
+        return "REPRODUCED · verified against known-good build", "good"
+    if final.get("confirmed") is False:
+        return f"REPRODUCED · NOT CONFIRMED (also fails on {build})", "warn"
+    return "REPRODUCED · not verified (no known-good build given)", "good"
 
 
 def failure_text(result: dict) -> str:
@@ -99,7 +125,7 @@ def make_evidence(run: Run, run_dir: Path, from_steps: bool):
 
 
 def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False,
-                 run_dir: Path | None = None) -> dict:
+                 run_dir: Path | None = None, known_good: str | None = None) -> dict:
     """Run the whole loop for one video into run_dir (default runs/<video stem>). Always ends by
     writing result.json, also when a stage crashes, so live event streams know the run is over."""
     video = Path(video)
@@ -114,7 +140,8 @@ def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False
     bug_id = bug_id or SAMPLE_BUGS.get(video.stem)
     app_url = os.getenv("APP_URL", "http://localhost:5173").rstrip("/")
     try:
-        return _pipeline(run, run_dir, video, run_id, bug_id, app_url, from_steps)
+        kg = known_good_target(known_good if known_good is not None else os.getenv("KNOWN_GOOD_URL"), app_url)
+        return _pipeline(run, run_dir, video, run_id, bug_id, app_url, from_steps, kg)
     except Exception as e:
         run.emit("error", "fail", f"{e.__class__.__name__}: {str(e)[:200]}")
         result = {"verdict": "ERROR", "error": f"{e.__class__.__name__}: {e}", "run_id": run_id, "bug_id": bug_id,
@@ -124,7 +151,7 @@ def run_pipeline(video: str, bug_id: str | None = None, from_steps: bool = False
 
 
 def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | None, app_url: str,
-              from_steps: bool) -> dict:
+              from_steps: bool, kg: tuple[str, str] | None) -> dict:
     if from_steps:
         run.emit("understand", "ok", "reusing cached steps.json", artifact=run_dir / "steps.json")
     else:
@@ -149,6 +176,7 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
     claim = steps["bug_claim"]
 
     previous, final, verdict = [], None, None
+    unconfirmed = None  # best fallback: judge said REPRODUCED but the known-good build failed too
     with store_running(app_url):
         for attempt in range(1, MAX_ATTEMPTS + 1):
             adir = run_dir / f"attempt_{attempt}"
@@ -175,31 +203,47 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
                      f"{verdict['verdict']} ({verdict['decided_by']}): {verdict['reason']}",
                      judge_meta, attempt, adir / "verdict.json")
 
-            # Oracle: same test on the fixed build. Logged for training data and used as the fix
-            # check; never fed back into the loop.
-            fixed = run_test(code, adir / "fixed", app_url, fixed=True) if not problem else result
-            oracle = {"buggy": result["outcome"], "fixed": fixed["outcome"]}
+            # Known-good build (optional): the same test must pass where the bug is fixed. It is the
+            # oracle in the judge log, and if the judge said REPRODUCED but the test fails there too,
+            # the test's expected behaviour is wrong: a legitimate retry trigger.
+            good = run_test(code, adir / "known_good", kg[0], fixed=True) if kg and not problem else None
+            oracle = {"buggy": result["outcome"], "fixed": (good or result)["outcome"]} if kg else None
             log_verdict(run_id, bug_id, attempt, claim, code, result, verdict, oracle, judge_meta)
 
             if verdict["verdict"] == "REPRODUCED":
-                ok = fixed["outcome"] == "pass"
-                run.emit("fixcheck", "ok" if ok else "fail",
-                         "passes on fixed build (?fixed=1)" if ok else f"fails on fixed build: {failure_text(fixed)[:150]}",
-                         attempt=attempt, artifact=fixed.get("screenshot"))
-                final = {"verdict": "REPRODUCED", "attempt": attempt, "fixcheck": fixed["outcome"],
-                         "test": f"{adir.name}/test_repro.py", "failure": failure_text(result)}
-                make_evidence(run, run_dir, from_steps)
-                models = sorted({c["model"] for c in run.calls if c.get("model")})
-                ticket = write_ticket(run_dir, adir, result, fixed, verdict,
-                                      {"run_id": run_id, "attempt": attempt, "models": models})
-                run.emit("ticket", "ok", "bug report written", attempt=attempt, artifact=ticket)
+                confirmed = None if good is None else good["outcome"] == "pass"
+                if good is not None:
+                    run.emit("fixcheck", "ok" if confirmed else "fail",
+                             f"passes on {kg[1]}" if confirmed
+                             else f"also fails on {kg[1]}: {failure_summary(good.get('message'))[:150]}",
+                             attempt=attempt, artifact=good.get("screenshot"))
+                if confirmed is False and attempt < MAX_ATTEMPTS:
+                    unconfirmed = unconfirmed or {"attempt": attempt, "adir": adir, "result": result, "good": good,
+                                                  "verdict": verdict}
+                    previous.append({"test_code": code, "outcome": "assert_fail on the buggy build AND on the "
+                                     "known-good build", "failure": failure_text(good),
+                                     "feedback": KNOWN_GOOD_FEEDBACK.format(
+                                         seen=failure_summary(good.get("message")) or good["outcome"])})
+                    run.emit("judge", "retry", "expected behaviour is wrong: the test also fails on the known-good "
+                             "build", attempt=attempt)
+                    continue
+                final = finish(run, run_dir, run_id, from_steps, kg, attempt, adir, result, good, verdict, confirmed)
                 break
             previous.append({"test_code": code, "outcome": result["outcome"],
                              "failure": failure_text(result), "feedback": verdict["feedback_for_generator"]})
             if attempt < MAX_ATTEMPTS:
                 run.emit("judge", "retry", "feeding judge feedback back to the test writer", attempt=attempt)
 
-    final = final or {"verdict": verdict["verdict"], "attempt": MAX_ATTEMPTS, "fixcheck": None}
+    if final is None and unconfirmed:  # no later attempt did better: report the unconfirmed reproduction
+        u = unconfirmed
+        run.emit("judge", "fail", f"no attempt passed on the known-good build; reporting attempt {u['attempt']}, "
+                 "which reproduced the symptom but is not confirmed", attempt=u["attempt"])
+        final = finish(run, run_dir, run_id, from_steps, kg, u["attempt"], u["adir"], u["result"], u["good"],
+                       u["verdict"], False)
+    if final is None:
+        final = {"verdict": verdict["verdict"], "attempt": MAX_ATTEMPTS, "confirmed": None,
+                 "known_good": kg and kg[1], "fixcheck": None}
+        final["label"], final["tone"] = outcome_label(final)
     final.update(run_id=run_id, bug_id=bug_id, seconds=round(time.time() - run.started, 1), cost_usd=run.cost(),
                  model_calls=[{k: c.get(k) for k in ("stage", "model", "provider", "effort", "prompt_tokens",
                                                      "completion_tokens", "frames_processed", "cost_usd")
@@ -208,12 +252,34 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
     return final
 
 
+def finish(run: Run, run_dir: Path, run_id: str, from_steps: bool, kg, attempt: int, adir: Path, result: dict,
+           good: dict | None, verdict: dict, confirmed: bool | None) -> dict:
+    """Result for a reproduced attempt, plus evidence and ticket."""
+    final = {"verdict": "REPRODUCED", "attempt": attempt, "confirmed": confirmed,
+             "known_good": kg and kg[1], "fixcheck": good and good["outcome"],
+             "test": f"{adir.name}/test_repro.py", "failure": failure_text(result)}
+    final["label"], final["tone"] = outcome_label(final)
+    make_evidence(run, run_dir, from_steps)
+    models = sorted({c["model"] for c in run.calls if c.get("model")})
+    ticket = write_ticket(run_dir, adir, result, good, verdict,
+                          {"run_id": run_id, "attempt": attempt, "models": models,
+                           "label": final["label"], "known_good": final["known_good"]})
+    run.emit("ticket", "ok", "bug report written", attempt=attempt, artifact=ticket)
+    return final
+
+
+TONE = {"good": "\033[32m", "warn": "\033[33m", "bad": "\033[31m"}
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("video")
     ap.add_argument("--bug-id")
     ap.add_argument("--from-steps", action="store_true", help="reuse runs/<name>/steps.json")
+    ap.add_argument("--known-good", help="'fixed' (the store's ?fixed=1) or the URL of a build without the bug; "
+                    "default: KNOWN_GOOD_URL from .env, else off")
     args = ap.parse_args()
-    out = run_pipeline(args.video, args.bug_id, args.from_steps)
-    print(f"\n{out['verdict']} after {out['attempt']} attempt(s) · fix check: {out['fixcheck']} · "
-          f"{out['seconds']}s · model cost ${out['cost_usd']}")
+    out = run_pipeline(args.video, args.bug_id, args.from_steps, known_good=args.known_good)
+    color = TONE.get(out.get("tone"), "") if sys.stdout.isatty() else ""
+    print(f"\n{color}{out['label']}\033[0m" if color else f"\n{out['label']}", end="")
+    print(f" · attempt {out['attempt']} · {out['seconds']}s · model cost ${out['cost_usd']}")

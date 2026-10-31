@@ -4,80 +4,72 @@
     {
       "action": "goto",
       "target": "home page",
-      "frame_ref": 0,
-      "selector_hint": null,
       "value": "index.html",
+      "selector_hint": null,
+      "frame_ref": 0,
       "n": 1
     },
     {
       "action": "click",
-      "target": "Linen Tea Towels product card on home grid",
-      "frame_ref": 1,
+      "target": "Linen Tea Towels product card",
       "selector_hint": "product-card-linen-towels",
+      "frame_ref": 0,
       "n": 2,
       "value": null
     },
     {
       "action": "click",
       "target": "Add to basket button on product page",
-      "frame_ref": 2,
       "selector_hint": "add-to-cart",
+      "frame_ref": 2,
       "n": 3,
       "value": null
     },
     {
       "action": "click",
       "target": "View basket link after adding to basket",
-      "frame_ref": 3,
       "selector_hint": "view-cart",
+      "frame_ref": 3,
       "n": 4,
       "value": null
     },
     {
-      "action": "click",
-      "target": "Promo code input in basket",
-      "frame_ref": 6,
-      "selector_hint": "promo-input",
-      "n": 5,
-      "value": null
-    },
-    {
       "action": "fill",
-      "target": "Promo code input in basket",
-      "frame_ref": 7,
+      "target": "Promo code input field",
       "selector_hint": "promo-input",
+      "frame_ref": 7,
       "value": "GLOW20",
-      "n": 6
+      "n": 5
     },
     {
       "action": "click",
       "target": "Apply button in promo form",
-      "frame_ref": 7,
       "selector_hint": "promo-apply",
-      "n": 7,
+      "frame_ref": 7,
+      "n": 6,
       "value": null
     },
     {
       "action": "fill",
-      "target": "Promo code input in basket",
-      "frame_ref": 11,
+      "target": "Promo code input field",
       "selector_hint": "promo-input",
+      "frame_ref": 11,
       "value": "GLOW20",
-      "n": 8
+      "n": 7
     },
     {
       "action": "click",
-      "target": "Apply button in promo form (second time)",
-      "frame_ref": 11,
+      "target": "Apply button in promo form",
       "selector_hint": "promo-apply",
-      "n": 9,
+      "frame_ref": 11,
+      "n": 8,
       "value": null
     }
   ],
   "bug_claim": {
-    "summary": "Promo code GLOW20 can be applied repeatedly to stack the discount beyond the order value.",
-    "expected": "Promo code should apply only once / discount should be capped at subtotal and total should not go negative.",
-    "actual": "After applying GLOW20 a second time the Discount changed to -$40.00 and Total became -$12.40 on a $27.60 subtotal (first apply correctly gave -$20.00 discount and $7.60 total).",
+    "summary": "Promo code GLOW20 can be applied repeatedly, stacking the $20 discount and driving the total negative.",
+    "expected": "Applying the same promo code a second time should have no additional effect; discount should remain -$20.00 and total should stay $7.60.",
+    "actual": "Second apply stacked the discount to -$40.00 and changed the total to -$12.40 (shows \"GLOW20 applied: $20.00 off.\" with Total -$12.40).",
     "element": "order total",
     "frame_ref": 12
   }

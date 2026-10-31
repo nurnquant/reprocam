@@ -4,6 +4,6 @@
   "title": "Promo code stacks into a negative total",
   "verdict": "REPRODUCED",
   "attempts": 1,
-  "seconds": 73.7,
-  "cost_usd": 0.0378
+  "seconds": 59.5,
+  "cost_usd": 0.0365
 }

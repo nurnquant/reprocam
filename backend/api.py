@@ -64,7 +64,8 @@ def summary(d: Path, kind: str) -> dict:
     result, steps = _json(d / "result.json"), _json(d / "steps.json")
     attempts = []
     for a in sorted(d.glob("attempt_*")):
-        buggy, fixed = _json(a / "buggy" / "result.json"), _json(a / "fixed" / "result.json")
+        buggy = _json(a / "buggy" / "result.json")
+        fixed = _json(a / "known_good" / "result.json") or _json(a / "fixed" / "result.json")  # older runs: fixed/
         attempts.append({
             "name": a.name,
             "test_code": (a / "test_repro.py").read_text() if (a / "test_repro.py").exists() else None,
