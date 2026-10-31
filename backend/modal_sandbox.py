@@ -27,13 +27,15 @@ image = (
 )
 
 
-def run_in_sandbox(code: str, plugin: str, fixed: bool, action_timeout_ms: int, timeout_s: int) -> dict:
+def run_in_sandbox(code: str, plugin: str, fixed: bool, action_timeout_ms: int, timeout_s: int,
+                   query: str = "") -> dict:
     app = modal.App.lookup(APP_NAME, create_if_missing=True)
     sb = modal.Sandbox.create(app=app, image=image, secrets=[], block_network=True,
                               timeout=120, cpu=1.0, memory=2048, workdir="/work")
     try:
         job = {"code": code, "plugin": plugin, "workdir": "/work/test", "fixed": fixed, "store_dir": "/store",
-               "store_port": STORE_PORT, "action_timeout_ms": action_timeout_ms, "timeout_s": timeout_s}
+               "store_port": STORE_PORT, "action_timeout_ms": action_timeout_ms, "timeout_s": timeout_s,
+               "query": query}
         proc = sb.exec("python", "/opt/sandbox_exec.py")
         proc.stdin.write(json.dumps(job))
         proc.stdin.write_eof()

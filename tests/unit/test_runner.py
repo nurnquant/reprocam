@@ -86,3 +86,10 @@ def test_action_timeout_is_10s_but_expect_timeouts_are_untouched(tmp_path):
     code = HEADER + '    expect(page.get_by_test_id("never")).to_be_visible(timeout=12000)\n'
     r = run_test(code, tmp_path / "b", "http://x", fixed=False)
     assert r["outcome"] == "assert_fail" and "12000ms" in r["message"]
+
+
+def test_extra_query_flags_reach_every_url_but_not_the_model(tmp_path):
+    from backend.testgen import assemble
+    code = assemble('def test_x(page):\n    assert "train=1" in url("index.html") and "fixed=" in url("index.html")\n')
+    assert run_test(code, tmp_path / "q", "http://x", fixed=False, query="train=1")["outcome"] == "pass"
+    assert run_test(code, tmp_path / "n", "http://x", fixed=False)["outcome"] == "assert_fail"

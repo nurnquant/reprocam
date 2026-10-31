@@ -45,12 +45,14 @@ from playwright.sync_api import Page, expect
 
 APP_URL = os.environ.get("APP_URL", "http://localhost:5173").rstrip("/")
 FIXED = os.environ.get("REPRO_FIXED", "0")
+EXTRA = dict(parse_qsl(os.environ.get("REPRO_QUERY", "")))  # flags for the app under test, set by the runner
 
 
 def url(path, **params):
     """APP_URL + path, with query params merged in. The build flag fixed=FIXED is always set."""
     parts = urlsplit(f"{APP_URL}/{path.lstrip('/')}")
     query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query.update(EXTRA)
     query.update({k: str(v) for k, v in params.items()})
     query["fixed"] = FIXED
     return urlunsplit(parts._replace(query=urlencode(query)))
@@ -139,7 +141,8 @@ def lint(code: str) -> str | None:
 
 
 def generate(steps: dict, previous: list[dict] | None = None, effort: str | None = None,
-             provider: str | None = None) -> tuple[str, str, dict]:
+             provider: str | None = None, extra: str | None = None) -> tuple[str, str, dict]:
+    """extra: an additional instruction appended to the request (used to make judge training data)."""
     """previous: earlier attempts [{test_code, outcome, failure, feedback}]. Returns (full file, notes, meta)."""
     rows = dom_snapshot.load_or_build()
     parts = [
@@ -147,6 +150,8 @@ def generate(steps: dict, previous: list[dict] | None = None, effort: str | None
         "Bug claim:\n" + json.dumps(steps["bug_claim"], indent=1),
         "Element map:\n" + dom_snapshot.to_prompt(rows),
     ]
+    if extra:
+        parts.append(extra)
     for i, p in enumerate(previous or [], 1):
         parts.append(f"Previous attempt {i}:\n```python\n{p['test_code']}\n```\n"
                      f"Result: {p['outcome']}\n{p['failure'][:1500]}\n"

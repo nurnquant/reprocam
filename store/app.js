@@ -63,6 +63,10 @@ function stepQuantity(id, delta) {
 
 function removeLine(id) {
   const cart = loadCart();
+  // remove_wrong_line: Remove deletes the first line in the basket, not the clicked one
+  if (bug("remove_wrong_line")) id = Object.keys(cart.items)[0];
+  // count_after_remove: the badge keeps counting what was removed
+  if (bug("count_after_remove")) cart.removed = (cart.removed || 0) + (cart.items[id] || 0);
   delete cart.items[id];
   saveCart(cart);
 }
@@ -86,8 +90,11 @@ function totals(cart) {
     if (!p) continue;
     // qty_stepper (cont.): a line at quantity 0 is still billed as one unit
     const billed = bug("qty_stepper") ? Math.max(qty, 1) : qty;
-    lines.push({ product: p, qty, lineTotal: p.price * billed });
-    subtotal += p.price * billed;
+    let lineTotal = p.price * billed;
+    // subtotal_rounding: lines with quantity 3 or more are rounded to whole dollars
+    if (bug("subtotal_rounding") && billed >= 3) lineTotal = Math.round(lineTotal / 100) * 100;
+    lines.push({ product: p, qty, lineTotal });
+    subtotal += lineTotal;
   }
   let discount = cart.promos.reduce((sum, code) => sum + (PROMOS[code] || 0), 0);
   if (!bug("neg_total")) discount = Math.min(discount, subtotal);
@@ -138,7 +145,8 @@ function swatch(p, size = "") {
 function renderCartCount() {
   const node = $('[data-testid="cart-count"]');
   if (!node) return;
-  const n = Object.values(loadCart().items).reduce((a, b) => a + b, 0);
+  const cart = loadCart();
+  const n = Object.values(cart.items).reduce((a, b) => a + b, 0) + (bug("count_after_remove") ? cart.removed || 0 : 0);
   node.textContent = String(n);
 }
 
@@ -171,7 +179,9 @@ function renderDetail() {
     el("div", { class: "detail-copy" },
       el("span", { class: "kind" }, p.kind),
       el("h1", { testid: "product-title" }, p.name),
-      el("p", { class: "price", testid: "product-price" }, money(p.price)),
+      // detail_price: the cushion's detail page shows $23.00 (digits swapped); the basket charges $32.00
+      el("p", { class: "price", testid: "product-price" },
+        money(bug("detail_price") && p.id === "indigo-cushion" ? 2300 : p.price)),
       el("p", { class: "blurb" }, p.blurb),
       el("button", { class: "btn", testid: "add-to-cart", onclick: () => { addToCart(p.id); added.hidden = false; } },
         "Add to basket"),
@@ -267,7 +277,8 @@ function renderCheckout() {
 
     const order = {
       number: `LL-${Math.floor(100000 + Math.random() * 900000)}`,
-      total: t.total,
+      // confirm_total_zero: the total is read after the basket was cleared
+      total: bug("confirm_total_zero") ? 0 : t.total,
       zone,
       name: form.elements.name.value.trim(),
     };

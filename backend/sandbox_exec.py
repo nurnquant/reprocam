@@ -24,7 +24,7 @@ SAFE_ENV = ("PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "PLAYWRIGHT_BROWSERS_PAT
 
 
 def execute(code: str, plugin: str, workdir: str | Path, app_url: str, fixed: bool,
-            action_timeout_ms: int, timeout_s: int) -> dict:
+            action_timeout_ms: int, timeout_s: int, query: str = "") -> dict:
     """Write test_repro.py + the result plugin into workdir and run pytest there."""
     workdir = Path(workdir)
     workdir.mkdir(parents=True, exist_ok=True)
@@ -34,7 +34,8 @@ def execute(code: str, plugin: str, workdir: str | Path, app_url: str, fixed: bo
     (workdir / "result.json").unlink(missing_ok=True)
 
     env = {k: os.environ[k] for k in SAFE_ENV if k in os.environ}
-    env.update(APP_URL=app_url, REPRO_FIXED="1" if fixed else "0", REPRO_ACTION_TIMEOUT_MS=str(action_timeout_ms))
+    env.update(APP_URL=app_url, REPRO_FIXED="1" if fixed else "0", REPRO_ACTION_TIMEOUT_MS=str(action_timeout_ms),
+               REPRO_QUERY=query)
     started = time.time()
     try:
         proc = subprocess.run(
@@ -65,7 +66,7 @@ if __name__ == "__main__":
     job = json.load(sys.stdin)
     _serve(job["store_dir"], job["store_port"])
     res = execute(job["code"], job["plugin"], job["workdir"], f"http://localhost:{job['store_port']}",
-                  job["fixed"], job["action_timeout_ms"], job["timeout_s"])
+                  job["fixed"], job["action_timeout_ms"], job["timeout_s"], job.get("query", ""))
     if res["screenshot"]:
         res["screenshot_png"] = base64.b64encode(Path(res["screenshot"]).read_bytes()).decode()
     print(MARK + json.dumps(res), flush=True)

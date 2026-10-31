@@ -50,6 +50,19 @@ def wrong_state(claim: dict, observed: str | None) -> tuple[set, set] | None:
     return None
 
 
+def judge_input(bug_claim: dict, test_code: str, result: dict) -> str:
+    """What a judge reads: the claim, the test, how the run ended, and the two values side by side.
+    Shared with scripts/gen_judge_data.py so training rows look exactly like real judge calls."""
+    observed = observed_actual(result.get("message"))
+    ending = ("The test passed." if result["outcome"] == "pass" else
+              f"Failure ({result.get('exc_type')}):\n{(result.get('message') or '')[:2500]}")
+    return (f"Bug claim:\n{json.dumps(bug_claim, indent=1)}\n\n"
+            f"Test code:\n```python\n{test_code}\n```\n\n"
+            f"{ending}\n\n"
+            f"Compare these two:\n- The tester saw (claim actual): {bug_claim.get('actual')}\n"
+            f"- The test observed (Actual value): {observed or '(not reported; see the failure above)'}")
+
+
 def judge(bug_claim: dict, test_code: str, result: dict, effort: str | None = None,
           provider: str | None = None) -> tuple[dict, dict | None]:
     """Returns (verdict, model call meta or None when a rule decided)."""
@@ -74,11 +87,7 @@ def judge(bug_claim: dict, test_code: str, result: dict, effort: str | None = No
                 "feedback_for_generator": f"{WRONG_STATE} The tester's screen showed {claimed}; your test saw "
                 f"{seen}. Check which product, page and starting state the tester was on, and replay that."}, None
 
-    user = (f"Bug claim:\n{json.dumps(bug_claim, indent=1)}\n\n"
-            f"Test code:\n```python\n{test_code}\n```\n\n"
-            f"Failure ({result['exc_type']}):\n{result['message'][:2500]}\n\n"
-            f"Compare these two:\n- The tester saw (claim actual): {bug_claim.get('actual')}\n"
-            f"- The test observed (Actual value): {observed or '(not reported; see the failure above)'}")
+    user = judge_input(bug_claim, test_code, result)
     text, meta = chat([{"role": "system", "content": PROMPT.read_text()}, {"role": "user", "content": user}],
                       stage="judge", effort=effort, provider=provider, response_format=SCHEMA)
     return {**json.loads(text), "decided_by": "model"}, meta

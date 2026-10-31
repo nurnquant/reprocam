@@ -105,14 +105,14 @@ def failure_summary(message: str | None) -> str:
     return " | ".join(keep)
 
 
-def run_test(code: str, workdir: str | Path, app_url: str, fixed: bool) -> dict:
+def run_test(code: str, workdir: str | Path, app_url: str, fixed: bool, query: str = "") -> dict:
     """Run test_repro.py (locally in workdir, or in a Modal Sandbox). Returns outcome, exc_type, message,
     output, seconds, and the final screenshot saved under workdir/artifacts/."""
     workdir = Path(workdir)
     if os.getenv("REPRO_SANDBOX") == "modal":
         from backend.modal_sandbox import run_in_sandbox  # needs the modal package and credentials
 
-        result = run_in_sandbox(code, PLUGIN, fixed, ACTION_TIMEOUT_MS, TIMEOUT_S)
+        result = run_in_sandbox(code, PLUGIN, fixed, ACTION_TIMEOUT_MS, TIMEOUT_S, query)
         png = result.pop("screenshot_png", None)
         result["screenshot"] = None
         if png:
@@ -124,7 +124,7 @@ def run_test(code: str, workdir: str | Path, app_url: str, fixed: bool) -> dict:
         # same files as a local run, so run summaries (and the UI) read results the same way
         (workdir / "result.json").write_text(json.dumps({k: result.get(k) for k in ("outcome", "phase", "exc_type", "message")}))
     else:
-        result = execute(code, PLUGIN, workdir, app_url, fixed, ACTION_TIMEOUT_MS, TIMEOUT_S)
+        result = execute(code, PLUGIN, workdir, app_url, fixed, ACTION_TIMEOUT_MS, TIMEOUT_S, query)
     result["message"] = _scrub(result.get("message") or "")
     result["output"] = _scrub(result.get("output") or "")
     return result
