@@ -1,0 +1,6 @@
+{
+  "verdict": "REPRODUCED",
+  "reason": "Test correctly empties basket (cart-count 0) then checks checkout-total for $0.00, but assertion line expect(...to_have_text(\"$0.00\")) failed with actual \"$18.50\" which exactly matches the claimed stale total.",
+  "feedback_for_generator": "",
+  "decided_by": "model"
+}

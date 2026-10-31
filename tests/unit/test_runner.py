@@ -74,3 +74,15 @@ def test_judge_value_rule_lets_a_matching_value_through():
     assert wrong_state(bug1_claim, observed_actual(msg)) is None          # same value: model decides
     assert wrong_state(bug1_claim, None) is None                            # nothing observed: model decides
     assert wrong_state({"actual": "spinner never stops"}, "$5.00") is None  # claim names no amount
+
+
+def test_action_timeout_is_10s_but_expect_timeouts_are_untouched(tmp_path):
+    import time
+    code = HEADER + '    page.get_by_test_id("missing").click()\n'
+    t = time.time()
+    r = run_test(code, tmp_path / "a", "http://x", fixed=False)
+    assert r["outcome"] == "error" and r["exc_type"].endswith("TimeoutError") and "10000ms" in r["message"]
+    assert time.time() - t < 25
+    code = HEADER + '    expect(page.get_by_test_id("never")).to_be_visible(timeout=12000)\n'
+    r = run_test(code, tmp_path / "b", "http://x", fixed=False)
+    assert r["outcome"] == "assert_fail" and "12000ms" in r["message"]

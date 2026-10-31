@@ -1,0 +1,50 @@
+{
+  "frame": {
+    "n": 15,
+    "t": 23.867,
+    "path": "keyframes/frame_15.jpg"
+  },
+  "tried": [
+    {
+      "stage": "segment",
+      "model": "sam-3.1",
+      "provider": "meta",
+      "effort": null,
+      "mode": "image",
+      "concept": "order total",
+      "frames_processed": 1,
+      "boxes": 0,
+      "latency_s": 1.6,
+      "cost_usd": null,
+      "on_bug_frame": 0
+    },
+    {
+      "stage": "segment",
+      "model": "sam-3.1",
+      "provider": "meta",
+      "effort": null,
+      "mode": "image",
+      "concept": "price",
+      "frames_processed": 1,
+      "boxes": 1,
+      "latency_s": 0.6,
+      "cost_usd": null,
+      "on_bug_frame": 1
+    }
+  ],
+  "calls": [],
+  "sam_mode": "image",
+  "concept": "price",
+  "method": "SAM 3.1",
+  "box": {
+    "object_id": "0",
+    "frame": null,
+    "t": null,
+    "left": 895.0,
+    "top": 184.0,
+    "right": 939.0,
+    "bottom": 196.0,
+    "confidence": null
+  },
+  "evidence": "evidence.png"
+}

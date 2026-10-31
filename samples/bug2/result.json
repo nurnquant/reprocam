@@ -1,0 +1,80 @@
+{
+  "verdict": "REPRODUCED",
+  "attempt": 2,
+  "confirmed": true,
+  "known_good": "fixed build (?fixed=1)",
+  "fixcheck": "pass",
+  "test": "attempt_2/test_repro.py",
+  "failure": "assert_fail (builtins.AssertionError): checkout total should be $0.00 when basket is empty\nExpected value: '$0.00'\nActual value: $18.50 \nCall log:\n  - Expect \"to_have_text\" get_by_test_id(\"checkout-total\") with timeout 5000ms\n  - waiting for get_by_test_id(\"checkout-total\")\n    14 \u00d7 locator resolved to <dd class=\"total\" data-testid=\"checkout-total\">$18.50</dd>\n       - unexpected value \"$18.50\"\n\nAria snapshot:\n- definition: $18.50",
+  "label": "REPRODUCED \u00b7 verified against known-good build",
+  "tone": "good",
+  "run_id": "bug2-1793476502",
+  "bug_id": "qty_stepper",
+  "testgen_prompt": "testgen v2",
+  "seconds": 87.9,
+  "cost_usd": 0.041,
+  "model_calls": [
+    {
+      "stage": "transcribe",
+      "model": "muse-voice-transcribe-1.0",
+      "provider": "meta"
+    },
+    {
+      "stage": "understand",
+      "model": "accounts/fireworks/models/muse-spark-open",
+      "provider": "fireworks",
+      "effort": "low",
+      "prompt_tokens": 11158,
+      "completion_tokens": 650,
+      "cost_usd": 0.01671
+    },
+    {
+      "stage": "testgen",
+      "model": "accounts/fireworks/models/muse-spark-open",
+      "provider": "fireworks",
+      "effort": "low",
+      "prompt_tokens": 2616,
+      "completion_tokens": 986,
+      "cost_usd": 0.007461
+    },
+    {
+      "stage": "judge",
+      "model": "accounts/fireworks/models/muse-spark-open",
+      "provider": "fireworks",
+      "effort": "low",
+      "prompt_tokens": 1383,
+      "completion_tokens": 289,
+      "cost_usd": 0.002957
+    },
+    {
+      "stage": "testgen",
+      "model": "accounts/fireworks/models/muse-spark-open",
+      "provider": "fireworks",
+      "effort": "low",
+      "prompt_tokens": 3479,
+      "completion_tokens": 1488,
+      "cost_usd": 0.010673
+    },
+    {
+      "stage": "judge",
+      "model": "accounts/fireworks/models/muse-spark-open",
+      "provider": "fireworks",
+      "effort": "low",
+      "prompt_tokens": 1392,
+      "completion_tokens": 353,
+      "cost_usd": 0.00324
+    },
+    {
+      "stage": "segment",
+      "model": "sam-3.1",
+      "provider": "meta",
+      "frames_processed": 1
+    },
+    {
+      "stage": "segment",
+      "model": "sam-3.1",
+      "provider": "meta",
+      "frames_processed": 1
+    }
+  ]
+}

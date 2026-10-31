@@ -1,0 +1,6 @@
+{
+  "verdict": "REPRODUCED",
+  "reason": "Test reproduced the claimed state sequence (decrease single item to 0) and the failing assertion checks the expected empty-basket total $0.00. Failure shows badge 0 with stale checkout-total $18.50, exactly the symptom described.",
+  "feedback_for_generator": "",
+  "decided_by": "model"
+}

@@ -45,6 +45,18 @@ STORE_MODE=buggy pytest tests/store   # 3 failed
 STORE_MODE=fixed pytest tests/store   # 3 passed
 ```
 
+## Known limitations
+- **Invariants can be shallow.** With a known-good build, testgen v2 prefers asserting that on-screen values
+  agree with each other. On bug2 it got there on the retry, but with a weak form: an if/else on the basket count
+  with a hard-coded `$18.50`, not a computed quantity × price. It fails on the buggy build and passes on the
+  fixed one, yet a price change would break it. One run each, so no claim of reliability yet.
+- **Expected behaviour is the tester's guess.** Without a known-good build there is nothing to check the claim's
+  `expected` against; such runs end "REPRODUCED · not verified".
+- **SAM finds things, not meanings.** "order total" returns no boxes; "price" returns every price. Muse Spark picks
+  the claimed one, and the evidence image says so.
+- **Generated code runs in a subprocess, not a sandbox.** Fine for a demo on a practice store; a real deployment
+  needs container isolation.
+
 ## Run the app
 ```bash
 python -m backend.api        # http://localhost:8000 (also serves the store on :5173)

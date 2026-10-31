@@ -171,7 +171,7 @@ function row(e) {
     li = document.createElement("li");
     li.dataset.stage = e.stage;
     state.n += 1;
-    const name = e.status === "retry" ? "Retry with the judge's feedback" : STAGES[e.stage] || e.stage;
+    const name = e.status === "retry" ? "Retry with a new test" : STAGES[e.stage] || e.stage;
     li.innerHTML = `<span class="num">${String(state.n).padStart(2, "0")}</span>
       <span class="name">${esc(name)}${e.attempt ? ` <small>· attempt ${e.attempt}</small>` : ""}</span>
       <span class="when"></span><span class="badge" hidden></span><span class="detail"></span>`;
@@ -191,6 +191,7 @@ async function onEvent(e) {
   row(e);
   const live = state.kind === "runs";
   const s = live && e.status !== "start" ? await refresh() : state.summary;
+  if (!s) return;  // live run: nothing to show until the first stage finishes
   const attempt = s.attempts.find((a) => a.name === `attempt_${e.attempt}`);
 
   if (e.stage === "frames" && e.status === "ok") renderFilmstrip(s);

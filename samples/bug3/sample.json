@@ -1,0 +1,12 @@
+{
+  "id": "bug3",
+  "bug_id": "zip_hang",
+  "title": "Checkout spins forever for a ZIP starting with 0",
+  "verdict": "REPRODUCED",
+  "label": "REPRODUCED \u00b7 verified against known-good build",
+  "tone": "good",
+  "attempts": 1,
+  "seconds": 72.1,
+  "cost_usd": 0.0359,
+  "testgen_prompt": "testgen v1"
+}

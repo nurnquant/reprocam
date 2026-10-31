@@ -5,5 +5,8 @@
   "verdict": "REPRODUCED",
   "attempts": 1,
   "seconds": 59.5,
-  "cost_usd": 0.0365
+  "cost_usd": 0.0365,
+  "label": "REPRODUCED \u00b7 verified against known-good build",
+  "tone": "good",
+  "testgen_prompt": "testgen v1"
 }

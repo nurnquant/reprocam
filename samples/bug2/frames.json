@@ -1,0 +1,130 @@
+{
+  "video": "samples/bug2.mov",
+  "duration": 40.316667,
+  "width": 1788,
+  "height": 974,
+  "has_audio": true,
+  "audio": "audio.wav",
+  "frames": [
+    {
+      "n": 0,
+      "t": 0.0,
+      "path": "keyframes/frame_00.jpg"
+    },
+    {
+      "n": 1,
+      "t": 1.967,
+      "path": "keyframes/frame_01.jpg"
+    },
+    {
+      "n": 2,
+      "t": 4.704,
+      "path": "keyframes/frame_02.jpg"
+    },
+    {
+      "n": 3,
+      "t": 6.073,
+      "path": "keyframes/frame_03.jpg"
+    },
+    {
+      "n": 4,
+      "t": 7.442,
+      "path": "keyframes/frame_04.jpg"
+    },
+    {
+      "n": 5,
+      "t": 8.811,
+      "path": "keyframes/frame_05.jpg"
+    },
+    {
+      "n": 6,
+      "t": 10.18,
+      "path": "keyframes/frame_06.jpg"
+    },
+    {
+      "n": 7,
+      "t": 12.917,
+      "path": "keyframes/frame_07.jpg"
+    },
+    {
+      "n": 8,
+      "t": 14.285,
+      "path": "keyframes/frame_08.jpg"
+    },
+    {
+      "n": 9,
+      "t": 15.654,
+      "path": "keyframes/frame_09.jpg"
+    },
+    {
+      "n": 10,
+      "t": 17.023,
+      "path": "keyframes/frame_10.jpg"
+    },
+    {
+      "n": 11,
+      "t": 18.392,
+      "path": "keyframes/frame_11.jpg"
+    },
+    {
+      "n": 12,
+      "t": 19.761,
+      "path": "keyframes/frame_12.jpg"
+    },
+    {
+      "n": 13,
+      "t": 21.13,
+      "path": "keyframes/frame_13.jpg"
+    },
+    {
+      "n": 14,
+      "t": 22.498,
+      "path": "keyframes/frame_14.jpg"
+    },
+    {
+      "n": 15,
+      "t": 23.867,
+      "path": "keyframes/frame_15.jpg"
+    },
+    {
+      "n": 16,
+      "t": 26.333,
+      "path": "keyframes/frame_16.jpg"
+    },
+    {
+      "n": 17,
+      "t": 28.741,
+      "path": "keyframes/frame_17.jpg"
+    },
+    {
+      "n": 18,
+      "t": 31.15,
+      "path": "keyframes/frame_18.jpg"
+    },
+    {
+      "n": 19,
+      "t": 32.979,
+      "path": "keyframes/frame_19.jpg"
+    },
+    {
+      "n": 20,
+      "t": 34.808,
+      "path": "keyframes/frame_20.jpg"
+    },
+    {
+      "n": 21,
+      "t": 36.638,
+      "path": "keyframes/frame_21.jpg"
+    },
+    {
+      "n": 22,
+      "t": 38.467,
+      "path": "keyframes/frame_22.jpg"
+    },
+    {
+      "n": 23,
+      "t": 40.216667,
+      "path": "keyframes/frame_23.jpg"
+    }
+  ]
+}

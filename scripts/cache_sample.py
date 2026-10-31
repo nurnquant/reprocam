@@ -24,8 +24,8 @@ def main():
     ap.add_argument("--as", dest="name", help="sample name (default: the run id)")
     ap.add_argument("--title", help="one line for the sample picker")
     args = ap.parse_args()
-    name = args.name or args.id
-    src, dst = ROOT / "runs" / args.id, ROOT / "samples" / name
+    sample = args.name or args.id
+    src, dst = ROOT / "runs" / args.id, ROOT / "samples" / sample
     if not (src / "result.json").exists():
         sys.exit(f"{src} has no result.json; run the agent first")
     if dst.exists():
@@ -60,12 +60,12 @@ def main():
     result = json.loads((src / "result.json").read_text())
     claim = json.loads((src / "steps.json").read_text())["bug_claim"]
     (dst / "sample.json").write_text(json.dumps({
-        "id": name, "bug_id": result.get("bug_id"), "title": args.title or claim["summary"],
+        "id": sample, "bug_id": result.get("bug_id"), "title": args.title or claim["summary"],
         "verdict": result["verdict"], "label": result.get("label"), "tone": result.get("tone"),
         "attempts": result.get("attempt"), "seconds": result.get("seconds"),
         "cost_usd": result.get("cost_usd"), "testgen_prompt": result.get("testgen_prompt")}, indent=2))
     size = sum(p.stat().st_size for p in dst.rglob("*") if p.is_file())
-    print(f"samples/{name}: {sum(1 for p in dst.rglob('*') if p.is_file())} files, {size / 2**20:.1f} MB")
+    print(f"samples/{sample}: {sum(1 for p in dst.rglob('*') if p.is_file())} files, {size / 2**20:.1f} MB")
 
 
 if __name__ == "__main__":

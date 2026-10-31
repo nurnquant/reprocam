@@ -1,0 +1,12 @@
+{
+  "id": "bug2",
+  "bug_id": "qty_stepper",
+  "title": "Quantity goes to 0 but the basket still charges",
+  "verdict": "REPRODUCED",
+  "label": "REPRODUCED \u00b7 verified against known-good build",
+  "tone": "good",
+  "attempts": 2,
+  "seconds": 87.9,
+  "cost_usd": 0.041,
+  "testgen_prompt": "testgen v2"
+}

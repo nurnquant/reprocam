@@ -1,0 +1,44 @@
+{
+  "app_url": "http://localhost:5173",
+  "steps": [
+    {
+      "action": "goto",
+      "target": "product page for Pebble Night Light",
+      "frame_ref": 0,
+      "value": "product.html?id=pebble-light",
+      "selector_hint": null,
+      "n": 1
+    },
+    {
+      "action": "click",
+      "target": "View basket link in added message",
+      "frame_ref": 0,
+      "selector_hint": "view-cart",
+      "n": 2,
+      "value": null
+    },
+    {
+      "action": "click",
+      "target": "Decrease quantity button for Pebble Night Light in basket",
+      "frame_ref": 2,
+      "selector_hint": "qty-minus",
+      "n": 3,
+      "value": null
+    },
+    {
+      "action": "click",
+      "target": "Checkout link in basket summary",
+      "frame_ref": 2,
+      "selector_hint": "checkout-button",
+      "n": 4,
+      "value": null
+    }
+  ],
+  "bug_claim": {
+    "summary": "Basket emptied to 0 after decreasing quantity but checkout page still shows previous order total.",
+    "expected": "After removing the only item, checkout should show empty basket state with order total $0.00 (or empty) and not allow checkout with stale amount.",
+    "actual": "Basket badge shows 0 but checkout Order total still shows $18.50 as if item still present.",
+    "element": "order total",
+    "frame_ref": 15
+  }
+}

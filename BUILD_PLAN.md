@@ -126,10 +126,10 @@ input types (text, image) each configured provider accepts before any sweep spen
 
 | When | Milestones | Gate |
 |---|---|---|
-| Sat Oct 31 | M1 store · M2 media + transcribe | — |
-| Sun Nov 1 | M3 understanding · M4 verify loop (start) | — |
-| Mon Nov 2 | M4 finish · M4b effort sweep · M5 SAM | **M4 accepted by 11:59 PM → M9 allowed** |
-| Tue Nov 3 | M6 API + UI · M7 deploy · M9 Glimmer (stretch, parallel) | **M9 hard stop 6:00 PM** |
+| Sat Oct 31 | ✅ M1 store · M2 media + transcribe · M3 understanding · M4 verify loop · M5 SAM · M6 API + UI (done early) | **M4 accepted Sat → M9 gate passed** |
+| Sun Nov 1 | M7 deploy | — |
+| Mon Nov 2 | M9 Glimmer (stretch) · M4b effort sweep | — |
+| Tue Nov 3 | M9 finish · bug bash · buffer | **M9 hard stop 6:00 PM** |
 | Wed Nov 4 | M8 polish, video, X post, submit | **Code freeze 12:00 PM** |
 
 ---
@@ -162,7 +162,8 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
 - [x] `transcribe.py`: POST `https://api.meta.ai/v1/asr/transcribe`, `Authorization` header,
       model `muse-voice-transcribe-1.0`; port from cookbook `06_muse_voice/01_voice_api_fundamentals/utils.py`.
       `keywords` = product names + "promo", "checkout", "ZIP".
-- [ ] Nur records 3 narrated sample videos (QuickTime screen + mic) → `samples/` — bug1 done; bug2, bug3 pending
+- [x] Nur records 3 narrated sample videos (QuickTime screen + mic) → `samples/` — bug1, bug2, bug3 (bug3 starts with bug2's
+      quantity-0 line still on screen; re-record from `?fixed=0&reset=1` if time allows)
 - [x] Acceptance: `python -m backend.media samples/bug1.mov` prints transcript + frame count
 
 ### M3 — Understanding: video → steps (Sun)
@@ -170,7 +171,8 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
       The model must choose selectors from this map, never invent them.
 - [x] `understand.py`: keyframes (base64 images) + transcript + DOM map → structured output
       (JSON schema) → `steps.json`. Cookbook refs: `01_api_fundamentals/04_structured_output`, `07_vision_input`.
-- [ ] Acceptance: all 3 samples produce steps matching the real flow (compare to `tests/store/`) — bug1 matches (2 runs); bug2, bug3 wait for recordings
+- [x] Acceptance: all 3 samples produce steps matching the real flow (compare to `tests/store/`) — bug1, bug2, bug3;
+      bug3's claim also mentions the leftover quantity state from its recording
 
 ### M4 — Test generation + runner + verify loop (Sun → Mon) ← core
 - [x] `testgen.py`: steps + DOM map + bug_claim (+ judge feedback) → `test_repro.py`
@@ -189,10 +191,14 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
 - [x] Fix check: final test on `?fixed=1` must PASS.
 - [x] `ticket.py`: markdown bug report (steps, claim, failing test + failure line, fixed-build result,
       evidence.png if present) → `runs/<id>/ticket.md` at the end of every REPRODUCED run.
-- [ ] Acceptance: ≥2 of 3 samples reach REPRODUCED and pass on fixed, via
+- [x] Acceptance: ≥2 of 3 samples reach REPRODUCED and pass on fixed, via
       `python -m backend.agent samples/bug1.mov` — bug1 REPRODUCED on attempt 1 + passes fixed (2/2 runs); bug2, bug3 pending
-- [ ] Honest retry moment: at least one sample naturally shows judge catching a wrong first test.
+- [x] Honest retry moment: at least one sample naturally shows judge catching a wrong first test.
       Never fake it.
+      Done Sat: 3/3 samples REPRODUCED and verified on the fixed build (bug1, bug3 on attempt 1; bug2 on attempt 2).
+      bug2's retry is real but came from the known-good check, not the judge: attempt 1 asserted the tester's
+      guessed "$0.00", also failed on ?fixed=1, and testgen v2 retried with an on-screen invariant. Live upload of
+      bug3.mov through the browser also verified (docs/screenshots/live_upload_bug3.png).
 
 ### M4b — Effort sweep (Mon, ~1 h)
 - [ ] `scripts/effort_sweep.py`: 3 samples × efforts {low, medium, high} × **3 repeats = 27 runs**,
@@ -235,7 +241,7 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
 - [ ] Record video (section 6). Post on X. Submit with repo, video, X link.
 
 ### M9 — STRETCH: Muse Glimmer as a trained verification judge (Tue, gated)
-**Gate:** start only if M4 is accepted by Mon 11:59 PM. **Hard stop:** Tue 6:00 PM — if not done,
+**Gate:** start only if M4 is accepted by Mon 11:59 PM (passed Sat Oct 31; M9 starts Mon Nov 2). **Hard stop:** Tue 6:00 PM — if not done,
 ship without it and list it in the roadmap. Runs in parallel with M6/M7.
 
 Why: deciding "did this test fail for the claimed reason?" is the hardest call in the product.

@@ -1,0 +1,84 @@
+{
+  "frame": {
+    "n": 23,
+    "t": 66.01666700000001,
+    "path": "keyframes/frame_23.jpg"
+  },
+  "tried": [
+    {
+      "stage": "segment",
+      "model": "sam-3.1",
+      "provider": "meta",
+      "effort": null,
+      "mode": "image",
+      "concept": "Place order button",
+      "frames_processed": 1,
+      "boxes": 3,
+      "latency_s": 2.3,
+      "cost_usd": null,
+      "on_bug_frame": 3
+    }
+  ],
+  "calls": [
+    {
+      "stage": "evidence",
+      "model": "accounts/fireworks/models/muse-spark-open",
+      "provider": "fireworks",
+      "effort": "low",
+      "prompt_tokens": 1398,
+      "completion_tokens": 174,
+      "reasoning_tokens": 106,
+      "latency_s": 2.73,
+      "finish_reason": "stop",
+      "cost_usd": 0.002487
+    }
+  ],
+  "sam_mode": "image",
+  "concept": "Place order button",
+  "candidates": [
+    {
+      "object_id": "0",
+      "frame": null,
+      "t": null,
+      "left": 1192.0,
+      "top": 26.0,
+      "right": 1253.0,
+      "bottom": 51.0,
+      "confidence": null
+    },
+    {
+      "object_id": "1",
+      "frame": null,
+      "t": null,
+      "left": 1187.0,
+      "top": 69.0,
+      "right": 1250.0,
+      "bottom": 95.0,
+      "confidence": null
+    },
+    {
+      "object_id": "2",
+      "frame": null,
+      "t": null,
+      "left": 306.0,
+      "top": 441.0,
+      "right": 401.0,
+      "bottom": 471.0,
+      "confidence": null
+    }
+  ],
+  "picked": 2,
+  "pick_reason": "Box 2 marks the \"Place order\" button at the bottom of the checkout form. It is the element that after clicking shows the indefinite \"Placing order\" spinner with Order total $18.50 still visible and no confirmation.",
+  "method": "SAM 3.1 + Muse Spark pick",
+  "box": {
+    "object_id": "2",
+    "frame": null,
+    "t": null,
+    "left": 306.0,
+    "top": 441.0,
+    "right": 401.0,
+    "bottom": 471.0,
+    "confidence": null
+  },
+  "evidence": "evidence.png"
+}

@@ -21,6 +21,7 @@ from pathlib import Path
 from backend.testgen import check_goto_url
 
 TIMEOUT_S = 60
+ACTION_TIMEOUT_MS = 10_000  # clicks/fills/navigation; expect() timeouts stay as the test writes them
 REPO = str(Path(__file__).resolve().parent.parent)
 HOME = str(Path.home())
 
@@ -45,6 +46,8 @@ class GotoGuardError(Exception):
 def _goto_guard(page):
     """Check every navigation at run time too: the build flag must be right or the run means nothing."""
     original, fixed = page.goto, os.environ.get("REPRO_FIXED", "0")
+    # A missing element should fail fast as a test error, not wait Playwright's default 30 s.
+    page.set_default_timeout(int(os.environ.get("REPRO_ACTION_TIMEOUT_MS", "10000")))
 
     def goto(url, *args, **kwargs):
         problem = check_goto_url(url, fixed)
@@ -110,7 +113,8 @@ def run_test(code: str, workdir: str | Path, app_url: str, fixed: bool) -> dict:
     (workdir / "pytest.ini").write_text("[pytest]\n")  # keep the repo's pytest.ini out of it
     (workdir / "result.json").unlink(missing_ok=True)
 
-    env = {**os.environ, "APP_URL": app_url, "REPRO_FIXED": "1" if fixed else "0"}
+    env = {**os.environ, "APP_URL": app_url, "REPRO_FIXED": "1" if fixed else "0",
+           "REPRO_ACTION_TIMEOUT_MS": str(ACTION_TIMEOUT_MS)}
     started = time.time()
     try:
         proc = subprocess.run(

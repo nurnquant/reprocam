@@ -1,0 +1,65 @@
+{
+  "verdict": "REPRODUCED",
+  "attempt": 1,
+  "confirmed": true,
+  "known_good": "fixed build (?fixed=1)",
+  "fixcheck": "pass",
+  "test": "attempt_1/test_repro.py",
+  "failure": "assert_fail (builtins.AssertionError): Clicking Place order should submit the checkout and navigate to order confirmation\nActual value: None\nError: element(s) not found \nCall log:\n  - Expect \"to_be_visible\" get_by_test_id(\"order-confirmation\") with timeout 8000ms\n  - waiting for get_by_test_id(\"order-confirmation\")\n\nAria snapshot:\n- banner:\n  - link \"Lumen & Loom\":\n    - /url: index.html\n    - text: Lumen\n    - emphasis: \"&\"\n    - text: Loom\n  - link \"Basket 1\":\n    - /url: cart.html\n- main:\n  - heading \"Checkout\" [level=1]\n  - text: Full name\n  - textbox \"Full name\": Ada Tester\n  - text: Email\n  - textbox \"Email\": ada@example.com\n  - text: Street address\n  - textbox \"Street address\": 12 harfpur lane\n  - text: City\n  - textbox \"City\": Cambridge\n  - text: ZIP code\n  - textbox \"ZIP code\": \"02139\"\n  - alert\n  - button \"Place order\" [disabled]\n  - progressbar \"Placing order\"\n  - complementary:\n    - term: Order total\n    - definition: $18.50\n    - paragraph: Free shipping on every order.\n- contentinfo: \"Lumen & Loom is a fictional shop for testing ReproCam. build: buggy\"",
+  "label": "REPRODUCED \u00b7 verified against known-good build",
+  "tone": "good",
+  "run_id": "bug3-1793476149",
+  "bug_id": "zip_hang",
+  "seconds": 72.1,
+  "cost_usd": 0.0359,
+  "model_calls": [
+    {
+      "stage": "transcribe",
+      "model": "muse-voice-transcribe-1.0",
+      "provider": "meta"
+    },
+    {
+      "stage": "understand",
+      "model": "accounts/fireworks/models/muse-spark-open",
+      "provider": "fireworks",
+      "effort": "low",
+      "prompt_tokens": 14622,
+      "completion_tokens": 1054,
+      "cost_usd": 0.022757
+    },
+    {
+      "stage": "testgen",
+      "model": "accounts/fireworks/models/muse-spark-open",
+      "provider": "fireworks",
+      "effort": "low",
+      "prompt_tokens": 2858,
+      "completion_tokens": 884,
+      "cost_usd": 0.00733
+    },
+    {
+      "stage": "judge",
+      "model": "accounts/fireworks/models/muse-spark-open",
+      "provider": "fireworks",
+      "effort": "low",
+      "prompt_tokens": 1631,
+      "completion_tokens": 305,
+      "cost_usd": 0.003335
+    },
+    {
+      "stage": "segment",
+      "model": "sam-3.1",
+      "provider": "meta",
+      "frames_processed": 1
+    },
+    {
+      "stage": "evidence",
+      "model": "accounts/fireworks/models/muse-spark-open",
+      "provider": "fireworks",
+      "effort": "low",
+      "prompt_tokens": 1398,
+      "completion_tokens": 174,
+      "cost_usd": 0.002487
+    }
+  ],
+  "testgen_prompt": "testgen v1"
+}

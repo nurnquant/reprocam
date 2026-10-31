@@ -1,0 +1,100 @@
+{
+  "app_url": "http://localhost:5173",
+  "steps": [
+    {
+      "action": "goto",
+      "value": "cart.html",
+      "selector_hint": null,
+      "target": "cart page",
+      "frame_ref": 0,
+      "n": 1
+    },
+    {
+      "action": "click",
+      "target": "Increase quantity button for Pebble Night Light",
+      "selector_hint": "qty-plus",
+      "frame_ref": 2,
+      "n": 2,
+      "value": null
+    },
+    {
+      "action": "click",
+      "target": "Decrease quantity button for Pebble Night Light",
+      "selector_hint": "qty-minus",
+      "frame_ref": 2,
+      "n": 3,
+      "value": null
+    },
+    {
+      "action": "click",
+      "target": "Decrease quantity button for Pebble Night Light again",
+      "selector_hint": "qty-minus",
+      "frame_ref": 2,
+      "n": 4,
+      "value": null
+    },
+    {
+      "action": "click",
+      "target": "Checkout link",
+      "selector_hint": "checkout-button",
+      "frame_ref": 4,
+      "n": 5,
+      "value": null
+    },
+    {
+      "action": "fill",
+      "target": "Full name field in checkout form",
+      "selector_hint": "checkout-name",
+      "value": "Ada Tester",
+      "frame_ref": 8,
+      "n": 6
+    },
+    {
+      "action": "fill",
+      "target": "Email field in checkout form",
+      "selector_hint": "checkout-email",
+      "value": "ada@example.com",
+      "frame_ref": 11,
+      "n": 7
+    },
+    {
+      "action": "fill",
+      "target": "Street address field in checkout form",
+      "selector_hint": "checkout-address",
+      "value": "12 harfpur lane",
+      "frame_ref": 13,
+      "n": 8
+    },
+    {
+      "action": "fill",
+      "target": "City field in checkout form",
+      "selector_hint": "checkout-city",
+      "value": "Cambridge",
+      "frame_ref": 15,
+      "n": 9
+    },
+    {
+      "action": "fill",
+      "target": "ZIP code field in checkout form",
+      "selector_hint": "checkout-zip",
+      "value": "02139",
+      "frame_ref": 17,
+      "n": 10
+    },
+    {
+      "action": "click",
+      "target": "Place order button",
+      "selector_hint": "place-order",
+      "frame_ref": 18,
+      "n": 11,
+      "value": null
+    }
+  ],
+  "bug_claim": {
+    "summary": "Place order never completes and stays spinning infinitely",
+    "expected": "Clicking Place order should submit the checkout and navigate to order confirmation",
+    "actual": "After filling valid checkout details and clicking Place order the button shows a Placing order spinner that spins indefinitely and no order confirmation is shown (Order total $18.50 remains on checkout page)",
+    "element": "Place order button",
+    "frame_ref": 23
+  }
+}
