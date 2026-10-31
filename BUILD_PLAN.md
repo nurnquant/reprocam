@@ -209,7 +209,7 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
 - [x] Chart shows mean and spread per effort. Set `.env` defaults from the result. Read 10 outputs by hand.
 - [x] Wording everywhere: "on our 3 bugs, <effort> reproduced N/9 at $X" — no general "best effort" claims.
       Done Sat: low 7/9 ($0.019/run), medium 8/9 ($0.031), high 7/9 ($0.059); 1 high call hit the 16k output
-      limit -> cell re-run at 32k (row kept, superseded). Defaults: testgen + judge medium. "Read 10 outputs by hand": not done yet.
+      limit -> cell re-run at 32k (row kept, superseded). Defaults: testgen + judge low (no level clearly better). "Read 10 outputs by hand": not done yet.
 
 ### M5 — SAM 3.1 evidence (Mon)
 - [x] `segment.py`: upload video (`purpose=user_data`), concept = `bug_claim.element`, parse with

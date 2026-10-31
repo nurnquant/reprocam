@@ -73,8 +73,9 @@ known-good build check on). "Verified" = reproduced and passing on the known-goo
 All three reproduced bug1 and bug3 every time; the differences are all bug2 (low 1/3, medium 2/3, high 1/3). One run
 of difference is within noise at 3 runs per cell. At high effort, one test-writing call spent its entire 16,000-token
 output budget on reasoning and returned nothing; that cell was re-run at 32,000 (its first row is kept in
-`data/effort_sweep.jsonl`, marked superseded), and the output limit is now 32,000 for every stage. Defaults:
-test writing and judging at **medium** (most verified on our 3 bugs; low is ~40% cheaper and faster).
+`data/effort_sweep.jsonl`, marked superseded), and the output limit is now 32,000 for every stage.
+
+On our 3 bugs no effort level was clearly better (7/9, 8/9, 7/9); we use low for speed and cost.
 
 ![Effort test on our 3 bugs](docs/effort_sweep.png)
 

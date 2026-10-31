@@ -4,10 +4,15 @@ Run from the reprocam folder:
     python scripts/gen_judge_data.py --plan --limit 20    # projected cost only
     python scripts/gen_judge_data.py --limit 20 --yes     # make up to 20 new rows (resumes)
 
-For each training bug, Muse Spark Open writes tests on purpose in 6 variants (correct repro, wrong
-assertion, missing step, broken selector, unrelated assertion, trivially passing). Each test runs on
-the buggy build (?train=1&fixed=0) and the fixed build (?fixed=1); LABELS turns the two outcomes
-into the verdict. Demo bugs 1-3 never appear here: they stay held out for evaluation.
+For each training bug, Muse Spark Open writes tests in several variants (correct repro, wrong assertion,
+missing step, unrelated assertion, trivially passing; weighted by PLAN). The model often ignores
+"deliberately break it" instructions, so broken tests are also made by code: every correct test gets one
+mutated copy (broken selector on an action, missing import, or wrong start page, in rotation) at no
+extra model cost. Each test runs on the buggy build (?train=1&fixed=0) and the fixed build (?fixed=1);
+LABELS turns the two outcomes into the verdict. Demo bugs 1-3 never appear here: they stay held out.
+
+    python scripts/gen_judge_data.py --split    # 40 random rows (seed 1031, one per group) -> eval file
+
 
 Rows: data/judge_sft_rows.jsonl (chat format in "messages" + metadata); cells the table drops go to
 data/judge_sft_dropped.jsonl. The M9 spend so far (both files) counts toward --max-cost.
@@ -111,6 +116,35 @@ VARIANTS = {
 }
 
 
+# Model calls per bug and variant for the full set (~445 calls -> ~600 rows with mutations).
+PLAN = {"correct": 31, "wrong_assertion": 18, "missing_step": 13, "unrelated_assert": 13, "trivial_pass": 14}
+MUTATIONS = ["broken_selector", "missing_import", "wrong_page"]
+EVAL = ROOT / "data" / "judge_sft_eval.jsonl"
+TRAIN = ROOT / "data" / "judge_sft_train.jsonl"
+
+
+def mutate(code: str, kind: str) -> str | None:
+    """A deliberately broken copy of a working test, or None if this test has nothing to break."""
+    import re
+    head, sep, body = code.partition("def test_")
+    if not sep:
+        return None
+    body = sep + body
+    if kind == "broken_selector":  # a testid that doesn't exist, on a click or fill (an action, not an expect)
+        m = re.search(r'get_by_test_id\("([\w-]+)"\)(?=\.(?:click|fill)\()', body)
+        return head + body[:m.start(1)] + m.group(1) + "-old" + body[m.end(1):] if m else None
+    if kind == "missing_import":  # uses a module the file never imports
+        lines = body.split("\n")
+        return head + "\n".join(lines[:1] + ["    started = time.monotonic()"] + lines[1:])
+    if kind == "wrong_page":  # starts somewhere the steps can't be taken
+        m = re.search(r'page\.goto\(url\("([^"]+)"', body)
+        if not m:
+            return None
+        other = "confirmation.html" if not m.group(1).startswith("confirmation") else "index.html"
+        return head + body[:m.start(1)] + other + body[m.end(1):]
+    raise ValueError(kind)
+
+
 def label(buggy: str, fixed: str) -> str | None:
     """Oracle label for one test from its buggy-build and fixed-build outcomes (None = drop the row)."""
     return LABELS[(buggy, fixed)]
@@ -125,11 +159,12 @@ def steps_json(bug: str) -> dict:
 
 
 def combos():
-    """Round-robin over repeats, variants and bugs, so any prefix is spread across all of them."""
-    for rep in range(1, 100):
-        for variant in VARIANTS:
-            for bug in BUGS:
-                yield bug, variant, rep
+    """Model calls in PLAN proportions, interleaved so any prefix is spread across bugs and variants."""
+    for rep in range(1, max(PLAN.values()) + 1):
+        for variant, n in PLAN.items():
+            if rep <= n:
+                for bug in BUGS:
+                    yield bug, variant, rep
 
 
 def existing() -> tuple[set, float]:
@@ -142,9 +177,9 @@ def existing() -> tuple[set, float]:
     return keys, spent
 
 
-def make_row(bug: str, variant: str, rep: int, app_url: str) -> dict:
+def run_and_label(bug: str, variant: str, rep: int, code: str, app_url: str, cost: float, meta: dict,
+                  group: str) -> dict:
     steps = steps_json(bug)
-    code, notes, meta = testgen.generate(steps, extra=VARIANTS[variant])
     work = WORK / f"{bug}-{variant}-{rep}"
     shutil.rmtree(work, ignore_errors=True)
     problem = testgen.lint(code)
@@ -156,28 +191,85 @@ def make_row(bug: str, variant: str, rep: int, app_url: str) -> dict:
     verdict = label(buggy["outcome"], good["outcome"])
     user = judge_input(steps["bug_claim"], code, buggy)
     return {
-        "bug": bug, "variant": variant, "rep": rep, "label": verdict,
+        "bug": bug, "variant": variant, "rep": rep, "label": verdict, "group": group,
         "oracle": {"buggy": buggy["outcome"], "fixed": good["outcome"]},
-        "test_hash": hashlib.sha256(code.encode()).hexdigest()[:12], "cost_usd": meta.get("cost_usd") or 0,
+        "test_hash": hashlib.sha256(code.encode()).hexdigest()[:12], "cost_usd": cost,
         "testgen_prompt": meta.get("prompt_version"), "effort": meta.get("effort"),
         "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user},
                      {"role": "assistant", "content": json.dumps({"verdict": verdict})}] if verdict else None,
     }
 
 
+def make_rows(bug: str, variant: str, rep: int, app_url: str) -> list[dict]:
+    """One model-written test (+ a mutated copy if it's a correct one). Same group = never split apart."""
+    code, notes, meta = testgen.generate(steps_json(bug), extra=VARIANTS[variant])
+    group = f"{bug}-{variant}-{rep}"
+    rows = [run_and_label(bug, variant, rep, code, app_url, meta.get("cost_usd") or 0, meta, group)]
+    if variant == "correct":
+        kind = MUTATIONS[(rep - 1) % len(MUTATIONS)]
+        broken = mutate(code, kind)
+        if broken:
+            rows.append(run_and_label(bug, f"mut_{kind}", rep, broken, app_url, 0.0, meta, group))
+    return rows
+
+
+def split(seed: int = 1031, n_eval: int = 40) -> None:
+    """Hold out n_eval random rows, one per group, BEFORE any training; their group siblings are left out of
+    training too, so no near-duplicate of an eval row is trained on."""
+    import random
+    rows = [json.loads(line) for line in ROWS.read_text().splitlines()]
+    groups = sorted({r.get("group") or f"{r['bug']}-{r['variant']}-{r['rep']}" for r in rows})
+    held = set(random.Random(seed).sample(groups, n_eval))
+    by_group = {}
+    for r in rows:
+        by_group.setdefault(r.get("group") or f"{r['bug']}-{r['variant']}-{r['rep']}", []).append(r)
+    eval_rows = [random.Random(f"{seed}-{g}").choice(by_group[g]) for g in sorted(held)]
+    train_rows = [r for g, rs in by_group.items() if g not in held for r in rs]
+    EVAL.write_text("".join(json.dumps(r) + "\n" for r in eval_rows))
+    TRAIN.write_text("".join(json.dumps(r) + "\n" for r in train_rows))
+    left_out = sum(len(by_group[g]) for g in held) - len(eval_rows)
+    print(f"eval {len(eval_rows)} rows -> {EVAL.relative_to(ROOT)} · train {len(train_rows)} rows -> "
+          f"{TRAIN.relative_to(ROOT)} · {left_out} sibling row(s) of eval rows used in neither")
+
+
+def project(todo: list, rows_now: list[dict]) -> None:
+    """Projected cost and label mix, from the first batch's measured cost and labels per variant."""
+    from collections import Counter
+    cost = sum(r["cost_usd"] for r in rows_now if r["cost_usd"]) / max(1, sum(1 for r in rows_now if r["cost_usd"]))
+    rates = {v: Counter(r["label"] for r in rows_now if r["variant"] == v) for v in PLAN}
+    mix = Counter({k: n for r in rows_now if r.get("label") for k, n in [(r["label"], 1)]})
+    for bug, variant, rep in todo:
+        seen = sum(rates[variant].values())
+        for lab, n in (rates[variant].items() if seen else [("NOT_REPRODUCED", 1)]):
+            mix[lab] += n / (seen or 1)
+        if variant == "correct":
+            mix["TEST_ERROR"] += 1  # the mutated copy
+    total = sum(mix.values())
+    print(f"{len(todo)} model calls · ~{total:.0f} rows in total (incl. {len(rows_now)} already made) · "
+          f"~${cost * len(todo):.2f} projected (${cost:.4f} per call, measured) · test runs are local and free")
+    print("projected labels: " + " · ".join(f"{k} {v / total:.0%}" for k, v in sorted(mix.items())))
+
+
 def main():
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from threading import Lock
     ap = argparse.ArgumentParser()
-    ap.add_argument("--limit", type=int, default=20, help="new rows to make in this run")
+    ap.add_argument("--limit", type=int, default=0, help="model calls in this run (0 = the whole PLAN)")
     ap.add_argument("--max-cost", type=float, default=20.0, help="cap for all M9 spend so far + this run (USD)")
+    ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--plan", action="store_true")
     ap.add_argument("--yes", action="store_true")
+    ap.add_argument("--split", action="store_true", help="write the held-out eval and train files, then exit")
     args = ap.parse_args()
+    if args.split:
+        return split()
 
     have, spent = existing()
-    todo = [c for c in combos() if c not in have][: args.limit]
-    per_row = 0.009  # one testgen call at low effort (~$0.007-0.01 logged); test runs are local and free
-    print(f"{len(todo)} new rows · ~${per_row * len(todo):.2f} projected · M9 spent so far ${spent:.2f} "
-          f"of ${args.max_cost:.2f} cap")
+    todo = [c for c in combos() if c not in have]
+    todo = todo[: args.limit] if args.limit else todo
+    rows_now = [json.loads(line) for line in ROWS.read_text().splitlines()] if ROWS.exists() else []
+    project(todo, rows_now)
+    print(f"M9 spent so far ${spent:.2f} of ${args.max_cost:.2f} cap")
     if args.plan or not todo:
         return
     if not args.yes and input("Run? [y/N] ").strip().lower() != "y":
@@ -185,20 +277,33 @@ def main():
 
     app_url = os.getenv("APP_URL", "http://localhost:5173").rstrip("/")
     ROWS.parent.mkdir(exist_ok=True)
-    with store_running(app_url):
-        for i, (bug, variant, rep) in enumerate(todo, 1):
-            if spent + per_row > args.max_cost:
-                print(f"Stopping: the next row would pass the ${args.max_cost:.2f} cap.")
-                break
-            started = time.time()
-            row = make_row(bug, variant, rep, app_url)
-            spent += row["cost_usd"]
-            with (ROWS if row["label"] else DROPPED).open("a") as f:
-                f.write(json.dumps(row) + "\n")
-            print(f"[{i}/{len(todo)}] {bug:<19} {variant:<16} buggy={row['oracle']['buggy']:<11} "
-                  f"fixed={row['oracle']['fixed']:<11} -> {row['label'] or 'DROPPED'} · ${row['cost_usd']:.4f} · "
-                  f"{time.time() - started:.0f}s")
-    print(f"M9 spent so far: ${spent:.3f}")
+    lock, done, state = Lock(), 0, {"spent": spent, "stop": False}
+
+    def one(combo):
+        if state["stop"]:
+            return []
+        return make_rows(*combo, app_url)
+
+    with store_running(app_url), ThreadPoolExecutor(args.workers) as pool:
+        futures = {pool.submit(one, c): c for c in todo}
+        for fut in as_completed(futures):
+            done += 1
+            try:
+                rows = fut.result()
+            except Exception as e:  # noqa: BLE001  (one bad call must not stop the batch)
+                print(f"[{done}/{len(todo)}] {futures[fut]} failed: {e.__class__.__name__}: {str(e)[:120]}")
+                continue
+            with lock:
+                for row in rows:
+                    state["spent"] += row["cost_usd"]
+                    with (ROWS if row["label"] else DROPPED).open("a") as f:
+                        f.write(json.dumps(row) + "\n")
+                if state["spent"] > args.max_cost:
+                    state["stop"] = True
+            for row in rows:
+                print(f"[{done}/{len(todo)}] {row['bug']:<19} {row['variant']:<20} buggy={row['oracle']['buggy']:<11} "
+                      f"fixed={row['oracle']['fixed']:<11} -> {row['label'] or 'DROPPED'}")
+    print(f"M9 spent so far: ${state['spent']:.3f}" + (" (stopped at the cap)" if state["stop"] else ""))
 
 
 if __name__ == "__main__":
