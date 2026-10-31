@@ -201,13 +201,15 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
       bug3.mov through the browser also verified (docs/screenshots/live_upload_bug3.png).
 
 ### M4b — Effort sweep (Mon, ~1 h)
-- [ ] `scripts/effort_sweep.py`: 3 samples × efforts {low, medium, high} × **3 repeats = 27 runs**,
+- [x] `scripts/effort_sweep.py`: 3 samples × efforts {low, medium, high} × **3 repeats = 27 runs**,
       from cached `steps.json` (skip transcription/understanding to save money). Only for providers where
       preflight showed effort actually changes behaviour.
       Deterministic score: REPRODUCED **and** passes on fixed. Record attempts, tokens, cost, seconds.
-- [ ] Cache to `data/effort_sweep.jsonl` (resume on rerun). Chart → `docs/effort_sweep.png`.
-- [ ] Chart shows mean and spread per effort. Set `.env` defaults from the result. Read 10 outputs by hand.
-- [ ] Wording everywhere: "on our 3 bugs, <effort> reproduced N/9 at $X" — no general "best effort" claims.
+- [x] Cache to `data/effort_sweep.jsonl` (resume on rerun). Chart → `docs/effort_sweep.png`.
+- [x] Chart shows mean and spread per effort. Set `.env` defaults from the result. Read 10 outputs by hand.
+- [x] Wording everywhere: "on our 3 bugs, <effort> reproduced N/9 at $X" — no general "best effort" claims.
+      Done Sat: low 7/9 ($0.019/run), medium 8/9 ($0.031), high 7/9 ($0.059); 1 high call hit the 16k output
+      limit -> cell re-run at 32k (row kept, superseded). Defaults: testgen + judge medium. "Read 10 outputs by hand": not done yet.
 
 ### M5 — SAM 3.1 evidence (Mon)
 - [x] `segment.py`: upload video (`purpose=user_data`), concept = `bug_claim.element`, parse with

@@ -25,6 +25,9 @@ PROVIDERS = {
 
 CALL_LOG = Path(__file__).resolve().parent.parent / "data" / "llm_calls.jsonl"
 RETRY_STATUS = {429, 500, 502, 503, 504}
+# One output budget for every stage and effort level (reasoning tokens count against it).
+# 32,000: at high effort one test-writing call spent all of 16,000 on reasoning (M4b sweep).
+MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "32000"))
 
 
 def get_client(provider: str | None = None) -> tuple[OpenAI, str]:
@@ -50,11 +53,12 @@ def cost_estimate(provider: str, prompt_tokens: int, completion_tokens: int) -> 
 
 
 def chat(messages: list[dict], *, stage: str, provider: str | None = None, effort: str | None = None,
-         response_format: dict | None = None, max_tokens: int = 16000, retries: int = 3,
+         response_format: dict | None = None, max_tokens: int | None = None, retries: int = 3,
          log_extra: dict | None = None) -> tuple[str, dict]:
     """Returns (content, meta). meta = model, provider, effort, tokens, latency_s, cost_usd."""
     provider = (provider or os.getenv("LLM_PROVIDER", "meta")).lower()
     effort = effort or effort_for(stage)
+    max_tokens = max_tokens or MAX_OUTPUT_TOKENS
     client, model = get_client(provider)
     kwargs = {"model": model, "messages": messages, "reasoning_effort": effort, "max_tokens": max_tokens}
     if response_format:
@@ -81,11 +85,24 @@ def chat(messages: list[dict], *, stage: str, provider: str | None = None, effor
         "completion_tokens": u.completion_tokens if u else None,
         "reasoning_tokens": getattr(details, "reasoning_tokens", None) if details else None,
         "latency_s": round(time.time() - started, 2),
-        "finish_reason": r.choices[0].finish_reason,
+        "finish_reason": r.choices[0].finish_reason, "max_tokens": max_tokens,
     }
     meta["cost_usd"] = cost_estimate(provider, meta["prompt_tokens"] or 0, meta["completion_tokens"] or 0)
     log_call({**meta, **(log_extra or {})})
-    return r.choices[0].message.content or "", meta
+    content = r.choices[0].message.content or ""
+    if meta["finish_reason"] == "length" and not content.strip():
+        raise TruncatedAnswer(f"{stage}: the model used all {max_tokens} output tokens "
+                              f"({meta['reasoning_tokens']} on reasoning) and returned no answer", meta)
+    return content, meta
+
+
+class TruncatedAnswer(RuntimeError):
+    """The output budget ran out (typically on reasoning at high effort) before any answer.
+    Carries the call's meta so its cost is still counted."""
+
+    def __init__(self, message: str, meta: dict):
+        super().__init__(message)
+        self.meta = meta
 
 
 def log_call(row: dict) -> None:

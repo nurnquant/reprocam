@@ -74,3 +74,21 @@ def test_a_not_app_flag_contradicted_by_grounded_steps_does_not_stop_the_run(mon
     fake(monkeypatch, ["assert_fail"], ["pass"], ["REPRODUCED"])
     out = agent.run_pipeline("bug1.mov", from_steps=True, run_dir=run_dir, known_good="fixed")
     assert (out["verdict"], out["attempt"]) == ("REPRODUCED", 1)
+
+
+def test_a_truncated_test_answer_is_a_failed_attempt_not_a_crash(monkeypatch, run_dir):
+    from backend.llm import TruncatedAnswer
+    fake(monkeypatch, ["assert_fail"] * 2, ["pass"] * 2, ["REPRODUCED"] * 2)
+    real = agent.testgen.generate
+    calls = {"n": 0}
+
+    def generate(steps, prev):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise TruncatedAnswer("testgen: out of tokens", {"model": "m", "provider": "p", "effort": "high",
+                                                             "cost_usd": 0.07, "stage": "testgen"})
+        return real(steps, prev)
+    monkeypatch.setattr(agent.testgen, "generate", generate)
+    out = agent.run_pipeline("bug2.mov", from_steps=True, run_dir=run_dir, known_good="fixed")
+    assert (out["verdict"], out["attempt"], out["confirmed"]) == ("REPRODUCED", 2, True)
+    assert out["cost_usd"] == 0.07  # the wasted call is still counted

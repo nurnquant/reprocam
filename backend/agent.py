@@ -19,7 +19,7 @@ from pathlib import Path
 
 from backend import media, testgen
 from backend.judge import judge
-from backend.llm import effort_for
+from backend.llm import TruncatedAnswer, effort_for
 from backend.runner import failure_summary, run_test
 from backend.segment import evidence
 from backend.ticket import write_ticket
@@ -194,7 +194,17 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
         for attempt in range(1, MAX_ATTEMPTS + 1):
             adir = run_dir / f"attempt_{attempt}"
             run.emit("testgen", "start", f"writing test (effort {effort_for('testgen')})", attempt=attempt)
-            code, notes, gen_meta = testgen.generate(steps, previous)
+            try:
+                code, notes, gen_meta = testgen.generate(steps, previous)
+            except TruncatedAnswer as e:  # counts as a failed attempt, not a crashed run
+                run.emit("testgen", "fail", str(e), e.meta, attempt)
+                previous.append({"test_code": "(none)", "outcome": "no test", "failure": str(e),
+                                 "feedback": "Your previous answer ran out of output tokens before the test. "
+                                 "Think less and write the test directly."})
+                verdict = {"verdict": "TEST_ERROR", "decided_by": "rule", "reason": str(e)}
+                if attempt < MAX_ATTEMPTS:
+                    run.emit("judge", "retry", "no test came back; writing it again", attempt=attempt)
+                continue
             adir.mkdir()
             (adir / "test_repro.py").write_text(code)
             run.emit("testgen", "ok", f"[{gen_meta['prompt_version']}] {notes}", gen_meta, attempt,
@@ -211,7 +221,11 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
                          f"{result['outcome']}: {failure_summary(result.get('message'))[:160] or 'passed'}",
                          attempt=attempt, artifact=result.get("screenshot"))
 
-            verdict, judge_meta = judge(claim, code, result)
+            try:
+                verdict, judge_meta = judge(claim, code, result)
+            except TruncatedAnswer as e:  # no verdict came back: not reproduced, try again
+                verdict, judge_meta = {"verdict": "NOT_REPRODUCED", "decided_by": "rule", "reason": str(e),
+                                       "feedback_for_generator": ""}, e.meta
             (adir / "verdict.json").write_text(json.dumps(verdict, indent=2))
             run.emit("judge", "ok" if verdict["verdict"] == "REPRODUCED" else "fail",
                      f"{verdict['verdict']} ({verdict['decided_by']}): {verdict['reason']}",
@@ -268,8 +282,8 @@ def _save(run: Run, run_dir: Path, run_id: str, bug_id: str | None, final: dict)
                  understand_prompt=f"understand {understand_prompt_version()}",
                  seconds=round(time.time() - run.started, 1), cost_usd=run.cost(),
                  model_calls=[{k: c.get(k) for k in ("stage", "model", "provider", "effort", "prompt_tokens",
-                                                     "completion_tokens", "reasoning_tokens", "frames_processed",
-                                                     "cost_usd")
+                                                     "completion_tokens", "reasoning_tokens", "finish_reason",
+                                                     "max_tokens", "frames_processed", "cost_usd")
                               if c.get(k) is not None} for c in run.calls])
     (run_dir / "result.json").write_text(json.dumps(final, indent=2))
     return final

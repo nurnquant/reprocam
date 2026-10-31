@@ -22,7 +22,7 @@ from statistics import mean
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from backend.agent import run_pipeline  # noqa: E402
-from backend.llm import CALL_LOG  # noqa: E402
+from backend.llm import CALL_LOG, MAX_OUTPUT_TOKENS  # noqa: E402
 
 BUGS = {"bug1": "neg_total", "bug2": "qty_stepper", "bug3": "zip_hang"}
 EFFORTS = ["low", "medium", "high"]
@@ -32,10 +32,46 @@ OUT = ROOT / "data" / "effort_sweep.jsonl"
 OUTPUT_GROWTH = {"low": 1.0, "medium": 392 / 220, "high": 588 / 220}
 
 
+def load_rows() -> list[dict]:
+    return [json.loads(line) for line in OUT.read_text().splitlines()] if OUT.exists() else []
+
+
 def done_cells() -> set:
-    if not OUT.exists():
-        return set()
-    return {(r["bug"], r["effort"], r["rep"]) for r in map(json.loads, OUT.read_text().splitlines())}
+    """Cells with a current (not superseded) row."""
+    return {(r["bug"], r["effort"], r["rep"]) for r in load_rows() if not r.get("superseded")}
+
+
+def cell_calls(row: dict) -> list[dict]:
+    """The cell's test-writing and judge calls. Rows from before calls carried finish_reason are
+    matched in data/llm_calls.jsonl by the run's time window (its run id holds the start time)."""
+    if row.get("calls"):
+        return row["calls"]
+    result = json.loads((ROOT / "runs" / "sweep" / f"{row['bug']}-{row['effort']}-{row['rep']}" / "result.json").read_text())
+    start = int(result["run_id"].rsplit("-", 1)[1])
+    end = start + (result.get("seconds") or row["seconds"])
+    # a call belongs to the cell it STARTED in (logged time minus latency): cells run back to back, so
+    # a call logged just after a cell ended must not count for the next one too
+    return [c for c in map(json.loads, CALL_LOG.read_text().splitlines())
+            if start - 1 <= c["ts"] - (c.get("latency_s") or 0) <= end
+            and c.get("stage") in ("testgen", "judge") and c.get("effort") == row["effort"]
+            and c.get("provider") == row.get("provider", "fireworks")]
+
+
+def limit_report(rows: list[dict]) -> dict:
+    """Per effort: calls, calls that stopped at the output limit, and the cells they belong to."""
+    out = {}
+    for effort in EFFORTS:
+        calls, hit_cells = 0, []
+        for r in (r for r in rows if r["effort"] == effort and not r.get("superseded")):
+            cc = cell_calls(r)
+            hits = sum(c.get("finish_reason") == "length" for c in cc)
+            calls += len(cc)
+            if hits:
+                hit_cells.append((r["bug"], r["effort"], r["rep"], hits))
+        out[effort] = {"calls": calls, "hits": sum(h for *_, h in hit_cells), "cells": hit_cells,
+                       "max_completion": max((c.get("completion_tokens") or 0 for r in rows if r["effort"] == effort
+                                              and not r.get("superseded") for c in cell_calls(r)), default=0)}
+    return out
 
 
 def projected_cost() -> dict:
@@ -68,6 +104,8 @@ def run_cell(bug: str, effort: str, rep: int) -> dict:
         r = {"verdict": "ERROR", "error": f"{e.__class__.__name__}: {e}", "model_calls": []}
     calls = [c for c in r.get("model_calls", []) if c.get("provider") == "fireworks"]
     return {
+        "calls": [{k: c.get(k) for k in ("stage", "completion_tokens", "reasoning_tokens", "finish_reason")} for c in calls],
+        "max_tokens": MAX_OUTPUT_TOKENS, "limit_hits": sum(c.get("finish_reason") == "length" for c in calls),
         "bug": bug, "effort": effort, "rep": rep, "verdict": r["verdict"], "confirmed": r.get("confirmed"),
         "success": r["verdict"] == "REPRODUCED" and r.get("confirmed") is True, "label": r.get("label"),
         "attempts": r.get("attempt"), "cost_usd": round(sum(c.get("cost_usd") or 0 for c in calls), 5),
@@ -83,7 +121,25 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--plan", action="store_true", help="print the projected cost and exit")
     ap.add_argument("--yes", action="store_true", help="spend without asking")
+    ap.add_argument("--limits", action="store_true", help="report output-limit hits per effort and exit")
+    ap.add_argument("--rerun-limited", action="store_true",
+                    help="mark cells with an output-limit hit as superseded (rows are kept) and run them again")
     args = ap.parse_args()
+
+    if args.limits or args.rerun_limited:
+        report = limit_report(load_rows())
+        for effort, rep in report.items():
+            print(f"  {effort:<6} {rep['hits']} of {rep['calls']} calls hit the output limit · largest output "
+                  f"{rep['max_completion']} tokens · cells: {[c[:3] for c in rep['cells']] or 'none'}")
+        if args.limits:
+            return
+        limited = {c[:3] for rep in report.values() for c in rep["cells"]}
+        rows = load_rows()
+        for r in rows:
+            if (r["bug"], r["effort"], r["rep"]) in limited and not r.get("superseded"):
+                r["superseded"] = f"output limit hit at max_tokens={r.get('max_tokens', 16000)}; re-run"
+        OUT.write_text("".join(json.dumps(r) + "\n" for r in rows))
+        print(f"Marked {len(limited)} cell(s) superseded; re-running them at MAX_OUTPUT_TOKENS={MAX_OUTPUT_TOKENS}.")
 
     todo = [(b, e, r) for b in BUGS for e in EFFORTS for r in range(1, REPEATS + 1) if (b, e, r) not in done_cells()]
     proj = projected_cost()

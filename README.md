@@ -41,8 +41,8 @@ Planted bugs (registry in `store/bugs.js`, one test per id in `tests/store/test_
 
 Ground-truth tests assert the correct behaviour, so they fail on buggy and pass on fixed:
 ```bash
-STORE_MODE=buggy pytest tests/store   # 3 failed
-STORE_MODE=fixed pytest tests/store   # 3 passed
+STORE_MODE=buggy pytest tests/store   # 8 failed (3 demo + 5 training-only bugs), 6 passed (public store hides training bugs)
+STORE_MODE=fixed pytest tests/store   # 14 passed
 ```
 
 ## Deploy (Modal)
@@ -59,6 +59,24 @@ Generated tests never run in the web container: each run gets a Modal Sandbox wi
 is served inside the sandbox on localhost), **no secrets**, a 120 s hard timeout, 1 CPU and 2 GiB. Live runs,
 uploads and budget counters live on the `reprocam-runs` Volume. Budget caps and per-IP limits apply; sample
 replays cost $0.
+
+## Effort test (reasoning effort for test writing + judging)
+On our 3 bugs, 3 runs per bug at each effort (Muse Spark Open on Fireworks, understanding fixed from cached steps,
+known-good build check on). "Verified" = reproduced and passing on the known-good build.
+
+| Effort | Verified | Hit the output limit | Mean cost per run | Mean attempts | Mean time |
+|---|---|---|---|---|---|
+| low | 7 of 9 | 0 of 29 calls | $0.019 | 1.6 | 55 s |
+| medium | 8 of 9 | 0 of 32 calls | $0.031 | 1.8 | 94 s |
+| high | 7 of 9 | 1 of 33 calls at a 16,000-token limit, 0 of 34 after a re-run at 32,000 | $0.059 | 1.9 | 166 s |
+
+All three reproduced bug1 and bug3 every time; the differences are all bug2 (low 1/3, medium 2/3, high 1/3). One run
+of difference is within noise at 3 runs per cell. At high effort, one test-writing call spent its entire 16,000-token
+output budget on reasoning and returned nothing; that cell was re-run at 32,000 (its first row is kept in
+`data/effort_sweep.jsonl`, marked superseded), and the output limit is now 32,000 for every stage. Defaults:
+test writing and judging at **medium** (most verified on our 3 bugs; low is ~40% cheaper and faster).
+
+![Effort test on our 3 bugs](docs/effort_sweep.png)
 
 ## Known limitations
 - **Invariants can be shallow.** With a known-good build, testgen v2 prefers asserting that on-screen values
