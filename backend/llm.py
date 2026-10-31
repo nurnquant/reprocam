@@ -50,7 +50,8 @@ def cost_estimate(provider: str, prompt_tokens: int, completion_tokens: int) -> 
 
 
 def chat(messages: list[dict], *, stage: str, provider: str | None = None, effort: str | None = None,
-         response_format: dict | None = None, max_tokens: int = 16000, retries: int = 3) -> tuple[str, dict]:
+         response_format: dict | None = None, max_tokens: int = 16000, retries: int = 3,
+         log_extra: dict | None = None) -> tuple[str, dict]:
     """Returns (content, meta). meta = model, provider, effort, tokens, latency_s, cost_usd."""
     provider = (provider or os.getenv("LLM_PROVIDER", "meta")).lower()
     effort = effort or effort_for(stage)
@@ -83,7 +84,7 @@ def chat(messages: list[dict], *, stage: str, provider: str | None = None, effor
         "finish_reason": r.choices[0].finish_reason,
     }
     meta["cost_usd"] = cost_estimate(provider, meta["prompt_tokens"] or 0, meta["completion_tokens"] or 0)
-    log_call(meta)
+    log_call({**meta, **(log_extra or {})})
     return r.choices[0].message.content or "", meta
 
 

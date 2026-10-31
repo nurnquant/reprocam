@@ -1,6 +1,6 @@
 """Freeze a finished run as a replayable sample (zero API cost on the public demo).
 
-Run from the reprocam folder:  python scripts/cache_sample.py bug1 [--title "..."]
+Run from the reprocam folder:  python scripts/cache_sample.py bug1 [--as bug1_name] [--title "..."]
 Copies runs/<id>/ -> samples/<id>/ (events with their original timing, steps, keyframes sent to
 the model, test + verdict + results per attempt, evidence, ticket) and adds video.mp4, a
 browser-playable copy of samples/<id>.mov with the narration.
@@ -21,9 +21,11 @@ KEEP_ATTEMPT = ["test_repro.py", "verdict.json", "buggy/result.json", "known_goo
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("id")
+    ap.add_argument("--as", dest="name", help="sample name (default: the run id)")
     ap.add_argument("--title", help="one line for the sample picker")
     args = ap.parse_args()
-    src, dst = ROOT / "runs" / args.id, ROOT / "samples" / args.id
+    name = args.name or args.id
+    src, dst = ROOT / "runs" / args.id, ROOT / "samples" / name
     if not (src / "result.json").exists():
         sys.exit(f"{src} has no result.json; run the agent first")
     if dst.exists():
@@ -58,11 +60,12 @@ def main():
     result = json.loads((src / "result.json").read_text())
     claim = json.loads((src / "steps.json").read_text())["bug_claim"]
     (dst / "sample.json").write_text(json.dumps({
-        "id": args.id, "bug_id": result.get("bug_id"), "title": args.title or claim["summary"],
-        "verdict": result["verdict"], "attempts": result.get("attempt"), "seconds": result.get("seconds"),
-        "cost_usd": result.get("cost_usd")}, indent=2))
+        "id": name, "bug_id": result.get("bug_id"), "title": args.title or claim["summary"],
+        "verdict": result["verdict"], "label": result.get("label"), "tone": result.get("tone"),
+        "attempts": result.get("attempt"), "seconds": result.get("seconds"),
+        "cost_usd": result.get("cost_usd"), "testgen_prompt": result.get("testgen_prompt")}, indent=2))
     size = sum(p.stat().st_size for p in dst.rglob("*") if p.is_file())
-    print(f"samples/{args.id}: {sum(1 for p in dst.rglob('*') if p.is_file())} files, {size / 2**20:.1f} MB")
+    print(f"samples/{name}: {sum(1 for p in dst.rglob('*') if p.is_file())} files, {size / 2**20:.1f} MB")
 
 
 if __name__ == "__main__":

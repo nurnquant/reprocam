@@ -93,14 +93,15 @@ def failure_text(result: dict) -> str:
     return f"{result['outcome']} ({result.get('exc_type')}): {result.get('message', '')}"
 
 
-def log_verdict(run_id, bug_id, attempt, claim, code, result, verdict, oracle, meta):
+def log_verdict(run_id, bug_id, attempt, claim, code, result, verdict, oracle, meta, prompt_version=None):
     JUDGE_LOG.parent.mkdir(exist_ok=True)
     row = {"ts": round(time.time(), 1), "run_id": run_id, "bug_id": bug_id, "attempt": attempt,
            "bug_claim": claim, "test_code": code,
            "test_hash": hashlib.sha256(code.encode()).hexdigest()[:12],
            "pytest_output": (failure_text(result) + "\n" + result.get("output", ""))[:3000],
            "verdict": verdict["verdict"], "decided_by": verdict["decided_by"], "reason": verdict["reason"],
-           "oracle": oracle, "judge_provider": meta and meta["provider"], "judge_effort": meta and meta["effort"]}
+           "oracle": oracle, "judge_provider": meta and meta["provider"], "judge_effort": meta and meta["effort"],
+           "testgen_prompt": prompt_version}
     with JUDGE_LOG.open("a") as f:
         f.write(json.dumps(row) + "\n")
 
@@ -184,7 +185,8 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
             code, notes, gen_meta = testgen.generate(steps, previous)
             adir.mkdir()
             (adir / "test_repro.py").write_text(code)
-            run.emit("testgen", "ok", notes, gen_meta, attempt, adir / "test_repro.py")
+            run.emit("testgen", "ok", f"[{gen_meta['prompt_version']}] {notes}", gen_meta, attempt,
+                     adir / "test_repro.py")
 
             problem = testgen.lint(code)
             if problem:
@@ -208,7 +210,8 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
             # the test's expected behaviour is wrong: a legitimate retry trigger.
             good = run_test(code, adir / "known_good", kg[0], fixed=True) if kg and not problem else None
             oracle = {"buggy": result["outcome"], "fixed": (good or result)["outcome"]} if kg else None
-            log_verdict(run_id, bug_id, attempt, claim, code, result, verdict, oracle, judge_meta)
+            log_verdict(run_id, bug_id, attempt, claim, code, result, verdict, oracle, judge_meta,
+                        gen_meta["prompt_version"])
 
             if verdict["verdict"] == "REPRODUCED":
                 confirmed = None if good is None else good["outcome"] == "pass"
@@ -244,7 +247,8 @@ def _pipeline(run: Run, run_dir: Path, video: Path, run_id: str, bug_id: str | N
         final = {"verdict": verdict["verdict"], "attempt": MAX_ATTEMPTS, "confirmed": None,
                  "known_good": kg and kg[1], "fixcheck": None}
         final["label"], final["tone"] = outcome_label(final)
-    final.update(run_id=run_id, bug_id=bug_id, seconds=round(time.time() - run.started, 1), cost_usd=run.cost(),
+    final.update(run_id=run_id, bug_id=bug_id, testgen_prompt=f"testgen {testgen.prompt_version()}",
+                 seconds=round(time.time() - run.started, 1), cost_usd=run.cost(),
                  model_calls=[{k: c.get(k) for k in ("stage", "model", "provider", "effort", "prompt_tokens",
                                                      "completion_tokens", "frames_processed", "cost_usd")
                               if c.get(k) is not None} for c in run.calls])

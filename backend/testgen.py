@@ -11,6 +11,7 @@ the preamble's names, and expect() messages that read the element (stale values)
 """
 import ast
 import json
+import os
 import sys
 from pathlib import Path
 from urllib.parse import parse_qsl, urlsplit
@@ -18,7 +19,13 @@ from urllib.parse import parse_qsl, urlsplit
 from backend import dom_snapshot
 from backend.llm import chat
 
-PROMPT = Path(__file__).resolve().parent / "prompts" / "testgen.md"
+PROMPTS = Path(__file__).resolve().parent / "prompts"
+
+
+def prompt_version() -> str:
+    """Prompt file in use: prompts/testgen_<version>.md, chosen by TESTGEN_PROMPT (default: newest)."""
+    found = sorted(p.stem.removeprefix("testgen_") for p in PROMPTS.glob("testgen_v*.md"))
+    return os.getenv("TESTGEN_PROMPT") or max(found, key=lambda v: int(v[1:]))
 SCHEMA = {"type": "json_schema", "json_schema": {"name": "test", "strict": True, "schema": {
     "type": "object",
     "properties": {"test_code": {"type": "string"}, "notes": {"type": "string"}},
@@ -144,9 +151,12 @@ def generate(steps: dict, previous: list[dict] | None = None, effort: str | None
         parts.append(f"Previous attempt {i}:\n```python\n{p['test_code']}\n```\n"
                      f"Result: {p['outcome']}\n{p['failure'][:1500]}\n"
                      f"Feedback: {p['feedback']}")
-    system = PROMPT.read_text().replace("{PREAMBLE}", PREAMBLE.strip())
+    version = prompt_version()
+    system = (PROMPTS / f"testgen_{version}.md").read_text().replace("{PREAMBLE}", PREAMBLE.strip())
     messages = [{"role": "system", "content": system}, {"role": "user", "content": "\n\n".join(parts)}]
-    text, meta = chat(messages, stage="testgen", effort=effort, provider=provider, response_format=SCHEMA)
+    text, meta = chat(messages, stage="testgen", effort=effort, provider=provider, response_format=SCHEMA,
+                      log_extra={"prompt_version": f"testgen {version}"})
+    meta["prompt_version"] = f"testgen {version}"
     out = json.loads(text)
     body = out["test_code"].replace(PREAMBLE.strip(), "")  # in case the model repeated it anyway
     return assemble(body), out["notes"], meta

@@ -18,7 +18,8 @@ def fake(monkeypatch, buggy, good, verdicts):
     n = {"gen": 0}
     monkeypatch.setattr(agent.testgen, "generate", lambda steps, prev: (n.update(gen=n["gen"] + 1) or
                         agent.testgen.assemble(f'def test_x(page):\n    page.goto(url("i.html", a="{n["gen"]}"))\n'),
-                        "notes", {"model": "m", "provider": "p", "effort": "low", "cost_usd": 0.0}))
+                        "notes", {"model": "m", "provider": "p", "effort": "low", "cost_usd": 0.0,
+                                   "prompt_version": "testgen v0"}))
 
     def run_test(code, workdir, app_url, fixed):
         out = (good if fixed else buggy)[n["gen"] - 1]
