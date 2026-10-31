@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Checkout · Lumen &amp; Loom</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body data-page="checkout">
+  <header class="site-header">
+    <a class="brand" href="index.html" data-testid="nav-home">Lumen <em>&amp;</em> Loom</a>
+    <a class="nav-cart" href="cart.html" data-testid="nav-cart">Basket <span data-testid="cart-count">0</span></a>
+  </header>
+  <main>
+    <h1>Checkout</h1>
+    <div class="checkout">
+      <form data-testid="checkout-form" novalidate>
+        <label class="field">Full name <input name="name" data-testid="checkout-name" autocomplete="name" required></label>
+        <label class="field">Email <input name="email" type="email" data-testid="checkout-email" autocomplete="email" required></label>
+        <label class="field">Street address <input name="address" data-testid="checkout-address" autocomplete="street-address" required></label>
+        <label class="field">City <input name="city" data-testid="checkout-city" autocomplete="address-level2" required></label>
+        <label class="field">ZIP code <input name="zip" inputmode="numeric" maxlength="5" data-testid="checkout-zip" autocomplete="postal-code" required></label>
+        <p class="error" data-testid="checkout-error" role="alert"></p>
+        <div class="place-row">
+          <button class="btn" type="submit" data-testid="place-order">Place order</button>
+          <span class="spinner" data-testid="place-order-spinner" role="progressbar" aria-label="Placing order" hidden></span>
+        </div>
+      </form>
+      <aside class="summary">
+        <dl>
+          <dt class="total">Order total</dt><dd class="total" data-testid="checkout-total"></dd>
+        </dl>
+        <p class="note">Free shipping on every order.</p>
+      </aside>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <span>Lumen &amp; Loom is a fictional shop for testing ReproCam.</span>
+    <span data-testid="build-mode"></span>
+  </footer>
+</body>
+</html>

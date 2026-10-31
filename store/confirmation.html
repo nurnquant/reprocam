@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Order confirmed · Lumen &amp; Loom</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body data-page="confirmation">
+  <header class="site-header">
+    <a class="brand" href="index.html" data-testid="nav-home">Lumen <em>&amp;</em> Loom</a>
+    <a class="nav-cart" href="cart.html" data-testid="nav-cart">Basket <span data-testid="cart-count">0</span></a>
+  </header>
+  <main>
+    <section class="confirm" data-testid="order-confirmation">
+      <h1>Thank you. Your order is on its way.</h1>
+      <p>Order number <span class="order-no" data-testid="order-number"></span></p>
+      <p>Total charged <strong data-testid="confirmation-total"></strong> · shipping to <span data-testid="confirmation-zone"></span></p>
+      <p><a href="index.html">Keep browsing</a></p>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <span>Lumen &amp; Loom is a fictional shop for testing ReproCam.</span>
+    <span data-testid="build-mode"></span>
+  </footer>
+</body>
+</html>
