@@ -173,22 +173,22 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
 - [ ] Acceptance: all 3 samples produce steps matching the real flow (compare to `tests/store/`) — bug1 matches (2 runs); bug2, bug3 wait for recordings
 
 ### M4 — Test generation + runner + verify loop (Sun → Mon) ← core
-- [ ] `testgen.py`: steps + DOM map + bug_claim (+ judge feedback) → `test_repro.py`
+- [x] `testgen.py`: steps + DOM map + bug_claim (+ judge feedback) → `test_repro.py`
       (pytest + Playwright sync API, `expect()`, no sleeps > 2 s, base URL from env, `?fixed=0|1` always explicit).
       Hang/never-finishes bugs must be asserted with `expect(...).to_be_visible(timeout=8000)`, never by waiting on an action
-- [ ] `runner.py`: subprocess `pytest -x -q`, 60 s timeout, capture output, failure message,
+- [x] `runner.py`: subprocess `pytest -x -q`, 60 s timeout, capture output, failure message,
       final screenshot. Generated code only ever runs inside this subprocess.
-- [ ] `judge.py`, rule layer first:
+- [x] `judge.py`, rule layer first:
       - passed → `NOT_REPRODUCED`
       - error that isn't an assertion (selector not found, action timeout like `page.click`,
         syntax/import error) → `TEST_ERROR`
       - assertion failure — **including `expect()` timeouts** (Playwright raises `AssertionError`)
         and plain `assert` → model judge: does the failure match `bug_claim`? (Muse Spark Open, effort low)
-- [ ] `agent.py`: ≤3 attempts, judge feedback into testgen, events emitted, every verdict logged to
+- [x] `agent.py`: ≤3 attempts, judge feedback into testgen, events emitted, every verdict logged to
       `data/judge_log.jsonl` **including the oracle** (re-run the same test on `?fixed=1`).
-- [ ] Fix check: final test on `?fixed=1` must PASS.
+- [x] Fix check: final test on `?fixed=1` must PASS.
 - [ ] Acceptance: ≥2 of 3 samples reach REPRODUCED and pass on fixed, via
-      `python -m backend.agent samples/bug1.mov`
+      `python -m backend.agent samples/bug1.mov` — bug1 REPRODUCED on attempt 1 + passes fixed (2/2 runs); bug2, bug3 pending
 - [ ] Honest retry moment: at least one sample naturally shows judge catching a wrong first test.
       Never fake it.
 
