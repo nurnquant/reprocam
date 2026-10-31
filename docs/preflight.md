@@ -7,7 +7,7 @@ One run per cell on a short reasoning question ("17 sheep" puzzle; correct answe
 |---|---|---|---|---|---|---|---|
 | Meta Model API | `muse-spark-1.3` | rejected (400) | 151 | 454 | 535 | 500 | OK ("red") |
 | Baseten | `meta-models/muse-spark-open` | 132* | 139 | 164 | 477 | 337 | OK ("Red") |
-| Fireworks | — | not tested: account suspended (no credit) | | | | | |
+| Fireworks | `accounts/fireworks/models/muse-spark-open` | rejected (400) | 159 | 220 | 392 | 588 | OK ("Red") |
 
 Reasoning tokens shown; every accepted call answered correctly (36).
 
@@ -15,13 +15,15 @@ Reasoning tokens shown; every accepted call answered correctly (36).
 level, not truly off. Don't rely on `none` meaning "no reasoning".
 
 ## Findings
-- **Effort is applied on both providers**: token use clearly changes between levels.
+- **Effort is applied on all three providers**: token use clearly changes between levels.
+- **Fireworks (rechecked Oct 31, new key)** is the only provider where tokens rise steadily
+  minimal → high (159 → 220 → 392 → 588), and it rejects `none` like Meta (400: reasoning can't be disabled).
 - **Levels are not comparable across providers**: Baseten `low` (164) ≈ Meta `minimal` (151);
   Meta `low` (454) ≈ Baseten `medium` (477). Run the M4b sweep per provider; never assume
   "low" means the same thing on both.
-- **Non-monotonic at the top** on both (high < medium on one sample). M4b's 3 repeats per cell decide.
-- **Image input works on both**, so `understand.py` (keyframes → steps) can run on Muse Spark Open
-  via Baseten, not just on Meta's API.
+- **Non-monotonic at the top** on Meta and Baseten (high < medium on one sample). M4b's 3 repeats per cell decide.
+- **Image input works on all three**, so `understand.py` (keyframes → steps) can run on Muse Spark Open
+  via Baseten or Fireworks, not just on Meta's API.
 - Baseten id from the hackathon guide (`meta-models/muse-spark-open-1026`) returns **404**;
   `meta-models/muse-spark-open` works (listed by `GET /v1/models`).
 

@@ -43,5 +43,47 @@
       "answer": "Red",
       "saw_red": true
     }
+  },
+  "fireworks": {
+    "model": "accounts/fireworks/models/muse-spark-open",
+    "efforts": {
+      "none": {
+        "ok": false,
+        "error": "BadRequestError: Error code: 400 - Muse Spark is a reasoning model; disabling thinking (reasoning_effort='n"
+      },
+      "minimal": {
+        "ok": true,
+        "answer": "36",
+        "reasoning_tokens": 159,
+        "completion_tokens": 170,
+        "seconds": 3.2
+      },
+      "low": {
+        "ok": true,
+        "answer": "36",
+        "reasoning_tokens": 220,
+        "completion_tokens": 231,
+        "seconds": 3.6
+      },
+      "medium": {
+        "ok": true,
+        "answer": "36",
+        "reasoning_tokens": 392,
+        "completion_tokens": 403,
+        "seconds": 7.5
+      },
+      "high": {
+        "ok": true,
+        "answer": "36",
+        "reasoning_tokens": 588,
+        "completion_tokens": 599,
+        "seconds": 13.7
+      }
+    },
+    "image": {
+      "ok": true,
+      "answer": "Red",
+      "saw_red": true
+    }
   }
 }

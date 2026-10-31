@@ -97,6 +97,9 @@ def main():
         sys.exit("Cancelled.")
 
     report = {}
+    if os.path.exists(OUT):  # keep results for providers not checked this time
+        with open(OUT) as f:
+            report = json.load(f)
     for name in configured:
         client, model = get_client(name)
         print(f"\n{name}  ({model})")
