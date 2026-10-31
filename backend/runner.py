@@ -1,8 +1,10 @@
-"""Run a generated test in its own pytest subprocess and classify how it ended.
+"""Run a generated test in isolation and classify how it ended.
 
-Generated code only ever executes here: a separate process, its own directory, a 60 s timeout.
-A small pytest plugin (written next to the test) records the exception type of the first
-failure, which is what the judge's rules need:
+Generated code never runs in this process. Locally it runs in a pytest subprocess with a minimal
+environment (no API keys); with REPRO_SANDBOX=modal it runs in a Modal Sandbox with no network
+except the practice store served inside the sandbox (backend/modal_sandbox.py). Both use
+backend/sandbox_exec.py. A small pytest plugin (written next to the test) records the exception
+type of the first failure, which is what the judge's rules need:
 
   pass         the test passed
   assert_fail  AssertionError in the test body; includes expect() timeouts, since Playwright's
@@ -10,14 +12,12 @@ failure, which is what the judge's rules need:
   error        anything else: syntax/import/collection errors, fixture errors, action timeouts
                (playwright TimeoutError from page.click etc.), selector errors, the 60 s limit
 """
+import base64
 import inspect
-import json
 import os
-import subprocess
-import sys
-import time
 from pathlib import Path
 
+from backend.sandbox_exec import execute
 from backend.testgen import check_goto_url
 
 TIMEOUT_S = 60
@@ -105,31 +105,23 @@ def failure_summary(message: str | None) -> str:
 
 
 def run_test(code: str, workdir: str | Path, app_url: str, fixed: bool) -> dict:
-    """Write and run test_repro.py in workdir. Returns outcome, exc_type, message, output, screenshot."""
+    """Run test_repro.py (locally in workdir, or in a Modal Sandbox). Returns outcome, exc_type, message,
+    output, seconds, and the final screenshot saved under workdir/artifacts/."""
     workdir = Path(workdir)
-    workdir.mkdir(parents=True, exist_ok=True)
-    (workdir / "test_repro.py").write_text(code)
-    (workdir / "conftest.py").write_text(PLUGIN)
-    (workdir / "pytest.ini").write_text("[pytest]\n")  # keep the repo's pytest.ini out of it
-    (workdir / "result.json").unlink(missing_ok=True)
+    if os.getenv("REPRO_SANDBOX") == "modal":
+        from backend.modal_sandbox import run_in_sandbox  # needs the modal package and credentials
 
-    env = {**os.environ, "APP_URL": app_url, "REPRO_FIXED": "1" if fixed else "0",
-           "REPRO_ACTION_TIMEOUT_MS": str(ACTION_TIMEOUT_MS)}
-    started = time.time()
-    try:
-        proc = subprocess.run(
-            [sys.executable, "-m", "pytest", "-x", "-q", "-p", "no:cacheprovider", "-p", "no:warnings", "--tb=short",
-             "--screenshot", "on", "--output", "artifacts", "test_repro.py"],
-            cwd=workdir, env=env, capture_output=True, text=True, timeout=TIMEOUT_S)
-        output = proc.stdout + proc.stderr
-        result = json.loads((workdir / "result.json").read_text()) if (workdir / "result.json").exists() \
-            else {"outcome": "error", "phase": "session", "exc_type": None, "message": output[-3000:]}
-    except subprocess.TimeoutExpired as e:
-        output = (e.stdout or b"").decode(errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
-        result = {"outcome": "error", "phase": "timeout", "exc_type": "subprocess.TimeoutExpired",
-                  "message": f"test did not finish within {TIMEOUT_S}s"}
-
-    shots = sorted((workdir / "artifacts").rglob("*.png"))
+        result = run_in_sandbox(code, PLUGIN, fixed, ACTION_TIMEOUT_MS, TIMEOUT_S)
+        png = result.pop("screenshot_png", None)
+        result["screenshot"] = None
+        if png:
+            shot = workdir / "artifacts" / "final.png"
+            shot.parent.mkdir(parents=True, exist_ok=True)
+            shot.write_bytes(base64.b64decode(png))
+            result["screenshot"] = str(shot)
+        (workdir / "test_repro.py").write_text(code)
+    else:
+        result = execute(code, PLUGIN, workdir, app_url, fixed, ACTION_TIMEOUT_MS, TIMEOUT_S)
     result["message"] = _scrub(result.get("message") or "")
-    return {**result, "fixed": fixed, "seconds": round(time.time() - started, 1),
-            "output": _scrub(output[-3000:]), "screenshot": str(shots[-1]) if shots else None}
+    result["output"] = _scrub(result.get("output") or "")
+    return result

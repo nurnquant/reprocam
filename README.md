@@ -45,6 +45,19 @@ STORE_MODE=buggy pytest tests/store   # 3 failed
 STORE_MODE=fixed pytest tests/store   # 3 passed
 ```
 
+## Deploy (Modal)
+One public URL: the app at `/`, the practice store at `/store/`.
+```bash
+uv pip install modal "cbor2<6"          # cbor2 6.x has no wheel for Intel Macs
+modal token new                          # once, opens the browser
+modal secret create reprocam-keys --from-dotenv .env   # keys live in a Modal Secret, never in the image
+modal deploy deploy/modal_app.py
+```
+Generated tests never run in the web container: each run gets a Modal Sandbox with **no network** (the store
+is served inside the sandbox on localhost), **no secrets**, a 120 s hard timeout, 1 CPU and 2 GiB. Live runs,
+uploads and budget counters live on the `reprocam-runs` Volume. Budget caps and per-IP limits apply; sample
+replays cost $0.
+
 ## Known limitations
 - **Invariants can be shallow.** With a known-good build, testgen v2 prefers asserting that on-screen values
   agree with each other. On bug2 it got there on the retry, but with a weak form: an if/else on the basket count
@@ -54,8 +67,8 @@ STORE_MODE=fixed pytest tests/store   # 3 passed
   `expected` against; such runs end "REPRODUCED · not verified".
 - **SAM finds things, not meanings.** "order total" returns no boxes; "price" returns every price. Muse Spark picks
   the claimed one, and the evidence image says so.
-- **Generated code runs in a subprocess, not a sandbox.** Fine for a demo on a practice store; a real deployment
-  needs container isolation.
+- **Local runs use a subprocess, not a sandbox.** Generated tests get no API keys locally either, but only the
+  deployed app (`REPRO_SANDBOX=modal`) runs them in an isolated, network-blocked Modal Sandbox.
 
 ## Run the app
 ```bash

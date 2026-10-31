@@ -10,3 +10,4 @@ python-multipart>=0.0.9
 pytest>=8
 pytest-playwright>=0.5
 pillow>=10
+modal>=1.6

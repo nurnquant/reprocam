@@ -43,6 +43,24 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ReproCam", lifespan=lifespan)
+# The practice store, on the same domain: what testers record and what judges can click through.
+app.mount("/store", StaticFiles(directory=ROOT / "store", html=True), name="store")
+PERSIST = None  # set by the Modal app to commit its Volume after writes
+
+
+def _persist():
+    if PERSIST:
+        try:
+            PERSIST()
+        except Exception:  # noqa: BLE001  (a failed commit must not fail the request)
+            pass
+
+
+def client_ip(request: Request) -> str:
+    """Visitor IP for the per-IP cap. Behind Modal's proxy the client is the right-most
+    X-Forwarded-For entry (added by the proxy, so a visitor can't spoof it by sending the header)."""
+    forwarded = request.headers.get("x-forwarded-for")
+    return forwarded.split(",")[-1].strip() if forwarded else request.client.host
 
 
 def _dir(kind: str, rid: str) -> Path:
@@ -102,12 +120,12 @@ def _sse(obj, event: str | None = None) -> str:
 
 @app.get("/api/budget")
 def get_budget(request: Request):
-    return budget.status(request.client.host)
+    return budget.status(client_ip(request))
 
 
 @app.post("/runs")
 async def create_run(request: Request, video: UploadFile):
-    ip = request.client.host
+    ip = client_ip(request)
     if _live.locked():
         raise HTTPException(429, "Another live run is in progress. Try again in a minute, or replay a sample.")
     rid = "u" + uuid.uuid4().hex[:10]
@@ -130,6 +148,7 @@ async def create_run(request: Request, video: UploadFile):
     except budget.BudgetError as e:
         upload.unlink(missing_ok=True)
         raise HTTPException(e.status, str(e)) from None
+    _persist()
 
     run_dir = RUNS / rid
     run_dir.mkdir(parents=True)
@@ -141,6 +160,7 @@ async def create_run(request: Request, video: UploadFile):
                 run_pipeline(str(upload), run_dir=run_dir)
             except Exception:  # noqa: BLE001  (already written to result.json by the agent)
                 pass
+            _persist()
 
     threading.Thread(target=work, daemon=True).start()
     return {"id": rid, "events": f"/runs/{rid}/events", **left}

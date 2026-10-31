@@ -264,6 +264,8 @@ main { padding: 24px clamp(16px, 3vw, 40px) 40px; display: grid; gap: 24px; }
   font: 12px var(--mono); color: var(--muted);
 }
 #foot-cost { color: var(--paper); }
+.store-link { color: var(--muted-light); }
+.store-link:hover { color: var(--paper); }
 .toast {
   position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 10;
   background: var(--paper); color: var(--ink); padding: 10px 16px; border-radius: 3px; font-size: 14px;
