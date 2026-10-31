@@ -290,7 +290,7 @@ Steps:
 | Write test | Muse Spark Open | Fireworks / Baseten | effort per M4b |
 | Judge | Muse Spark Open → **tuned Muse Glimmer 30B** (M9) | Fireworks | rules first |
 
-Provider ids: Fireworks `accounts/fireworks/models/muse-spark-open` · Baseten `meta-models/muse-spark-open-1026`
+Provider ids: Fireworks `accounts/fireworks/models/muse-spark-open` · Baseten `meta-models/muse-spark-open` (guide's `-1026` id 404s)
 · Glimmer training base `accounts/fireworks/models/muse-glimmer-30b` (training only, not serverless) —
 source: Fireworks Oct 30 workshop deck; verify before M9.
 

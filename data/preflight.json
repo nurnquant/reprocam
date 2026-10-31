@@ -1,0 +1,47 @@
+{
+  "baseten": {
+    "model": "meta-models/muse-spark-open",
+    "efforts": {
+      "none": {
+        "ok": true,
+        "answer": "36",
+        "reasoning_tokens": 132,
+        "completion_tokens": 143,
+        "seconds": 1.4
+      },
+      "minimal": {
+        "ok": true,
+        "answer": "36",
+        "reasoning_tokens": 139,
+        "completion_tokens": 150,
+        "seconds": 1.0
+      },
+      "low": {
+        "ok": true,
+        "answer": "36",
+        "reasoning_tokens": 164,
+        "completion_tokens": 175,
+        "seconds": 0.9
+      },
+      "medium": {
+        "ok": true,
+        "answer": "36",
+        "reasoning_tokens": 477,
+        "completion_tokens": 488,
+        "seconds": 2.0
+      },
+      "high": {
+        "ok": true,
+        "answer": "36",
+        "reasoning_tokens": 337,
+        "completion_tokens": 348,
+        "seconds": 1.4
+      }
+    },
+    "image": {
+      "ok": true,
+      "answer": "Red",
+      "saw_red": true
+    }
+  }
+}

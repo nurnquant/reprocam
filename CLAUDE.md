@@ -14,7 +14,7 @@ reason (retry loop otherwise). After the fix, the same test passes.
 - Product AI must run on Meta models. Use `backend/llm.py:get_client()`; never hardcode providers.
 - Meta API: base `https://api.meta.ai/v1`, OpenAI SDK, key in `MODEL_API_KEY`, model `muse-spark-1.3`.
   Do NOT use the official Model API client package (out of date) — use the OpenAI SDK.
-- Baseten model id: `meta-models/muse-spark-open-1026` (not the docs' default id).
+- Baseten model id: `meta-models/muse-spark-open` (the guide's `-1026` id returns 404 on our account — verified Oct 31).
 - Voice Transcribe: one-shot `POST https://api.meta.ai/v1/asr/transcribe` (Authorization header),
   model `muse-voice-transcribe-1.0`, mono 16-bit WAV (convert with ffmpeg), max 10 min / 32 MB.
 - SAM 3.1: model `sam-3.1` via Responses API through the OpenAI SDK; parse output ONLY with
