@@ -1,14 +1,7 @@
 // Lumen & Loom practice store. Fictional brand, built as ReproCam's app under test.
 //
-// Three bugs are planted on purpose. Each is switched off when the build flag is set:
-//   ?fixed=1  -> fixed build (remembered in localStorage)
-//   ?fixed=0  -> back to the buggy build
-// Search this file for "BUG 1", "BUG 2", "BUG 3".
-
-const params = new URLSearchParams(location.search);
-if (params.get("fixed") === "1") localStorage.setItem("ll_fixed", "1");
-if (params.get("fixed") === "0") localStorage.removeItem("ll_fixed");
-const FIXED = localStorage.getItem("ll_fixed") === "1";
+// Planted bugs and the ?fixed=1 build flag live in bugs.js (loaded first).
+// Search this file for bug(" to find each one.
 
 // Prices in cents.
 const PRODUCTS = [
@@ -59,11 +52,11 @@ function addToCart(id) {
 function stepQuantity(id, delta) {
   const cart = loadCart();
   const qty = cart.items[id] || 0;
-  if (FIXED) {
-    cart.items[id] = Math.max(1, qty + delta);
-  } else {
-    // BUG 2: the stepper can go down to 0 and the line stays in the cart.
+  if (bug("qty_stepper")) {
+    // the stepper can go down to 0 and the line stays in the cart
     cart.items[id] = Math.max(0, qty + delta);
+  } else {
+    cart.items[id] = Math.max(1, qty + delta);
   }
   saveCart(cart);
 }
@@ -78,8 +71,8 @@ function applyPromo(raw) {
   const code = raw.trim().toUpperCase();
   const cart = loadCart();
   if (!PROMOS[code]) return { ok: false, msg: "That code isn't valid." };
-  if (FIXED && cart.promos.includes(code)) return { ok: false, msg: `${code} is already applied.` };
-  // BUG 1: nothing stops the same code being applied again and again.
+  // neg_total: nothing stops the same code being applied again and again
+  if (!bug("neg_total") && cart.promos.includes(code)) return { ok: false, msg: `${code} is already applied.` };
   cart.promos.push(code);
   saveCart(cart);
   return { ok: true, msg: `${code} applied: ${money(PROMOS[code])} off.` };
@@ -91,13 +84,13 @@ function totals(cart) {
   for (const [id, qty] of Object.entries(cart.items)) {
     const p = productById(id);
     if (!p) continue;
-    // BUG 2 (cont.): a line at quantity 0 is still billed as one unit.
-    const billed = FIXED ? qty : Math.max(qty, 1);
+    // qty_stepper (cont.): a line at quantity 0 is still billed as one unit
+    const billed = bug("qty_stepper") ? Math.max(qty, 1) : qty;
     lines.push({ product: p, qty, lineTotal: p.price * billed });
     subtotal += p.price * billed;
   }
   let discount = cart.promos.reduce((sum, code) => sum + (PROMOS[code] || 0), 0);
-  if (FIXED) discount = Math.min(discount, subtotal);
+  if (!bug("neg_total")) discount = Math.min(discount, subtotal);
   return { lines, subtotal, discount, total: subtotal - discount };
 }
 
@@ -107,13 +100,13 @@ const ZONES = {
   1: "Northeast", 2: "Mid-Atlantic", 3: "Southeast", 4: "Great Lakes", 5: "Plains",
   6: "Central", 7: "South", 8: "Mountain", 9: "Pacific",
 };
-if (FIXED) ZONES[0] = "New England";
+if (!bug("zip_hang")) ZONES[0] = "New England";
 
 function lookupShippingZone(zip) {
   return new Promise((resolve) => {
     setTimeout(() => {
       const zone = ZONES[zip[0]];
-      // BUG 3: no zone for ZIPs starting with "0" and no else branch,
+      // zip_hang: no zone for ZIPs starting with "0" and no else branch,
       // so the promise never settles and checkout spins forever.
       if (zone) resolve(zone);
     }, 400);
@@ -201,7 +194,7 @@ function renderCart() {
 
   const list = el("ul", { class: "lines" });
   for (const { product: p, qty, lineTotal } of t.lines) {
-    const atMin = FIXED && qty <= 1;
+    const atMin = !bug("qty_stepper") && qty <= 1;
     list.append(
       el("li", { class: "line", testid: `cart-line-${p.id}` },
         swatch(p, "small"),

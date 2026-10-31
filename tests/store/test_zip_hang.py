@@ -1,4 +1,4 @@
-"""Bug 3: ZIP codes starting with 0 leave the "Place order" spinner spinning forever."""
+"""zip_hang: ZIP codes starting with 0 leave the "Place order" spinner spinning forever."""
 import re
 
 from playwright.sync_api import expect

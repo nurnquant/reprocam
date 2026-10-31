@@ -1,4 +1,4 @@
-"""Bug 2: "−" on quantity 1 sets the line to 0, but the line is still charged."""
+"""qty_stepper: "−" on quantity 1 sets the line to 0, but the line is still charged."""
 from conftest import add_product_to_basket, money
 
 

@@ -31,10 +31,10 @@ python scripts/check_env.py
 python scripts/serve_store.py          # http://localhost:5173  (buggy build)
 ```
 Open any page with `?fixed=1` for the fixed build (`?fixed=0` to go back; the choice sticks in localStorage).
-Planted bugs:
-1. Promo `GLOW20` ($20 off) can be applied again and again; the total goes negative.
-2. "−" on quantity 1 drops the line to 0 but still charges for it.
-3. ZIP codes starting with `0` leave the "Place order" spinner spinning forever.
+Planted bugs (registry in `store/bugs.js`, one test per id in `tests/store/test_<id>.py`):
+- `neg_total`: promo `GLOW20` ($20 off) can be applied again and again; the total goes negative.
+- `qty_stepper`: "−" on quantity 1 drops the line to 0 but still charges for it.
+- `zip_hang`: ZIP codes starting with `0` leave the "Place order" spinner spinning forever.
 
 Ground-truth tests assert the correct behaviour, so they fail on buggy and pass on fixed:
 ```bash

@@ -1,10 +1,22 @@
-# ReproCam — Build Plan for Claude Code
+# ReproCam — Build Plan v2
 
 Read `CLAUDE.md` first (rules, endpoints, model ids). This file is the work order.
-Work milestone by milestone. After each milestone: run its acceptance check, commit
-(`git commit -m "M<n>: ..."`), tick the boxes here, and stop to report to Nur.
+Work milestone by milestone. After each one: run its acceptance check, commit
+(`git commit -m "M<n>: ..."`), tick the boxes, and stop to report to Nur.
 
-**Deadline:** Wed Nov 4, 9:00 PM ET. Code freeze: Wed 12:00 PM ET (rest of the day = video + submission).
+**Deadline:** Wed Nov 4, 9:00 PM ET. **Code freeze:** Wed 12:00 PM ET (afternoon = video + submit).
+
+### What changed from v1 (old plan: `docs/BUILD_PLAN_v1.md`)
+1. **Reasoning effort is a per-stage setting, default `low`.** Fireworks' own tests showed Muse Spark
+   Open scored best at low effort (88.5) and worst at high (81.8). We measure it for our task (M4b).
+2. **Frames, not video, for Muse Spark Open.** Fireworks serves it as text + image in. Video goes
+   to SAM 3.1 only; Muse Spark always gets keyframes as images.
+3. **Deterministic grading first.** The buggy/fixed toggle is our ground-truth oracle. LLM judging
+   only where a rule can't decide.
+4. **New stretch milestone M9: fine-tune Muse Glimmer 30B as the verification judge** (free LoRA SFT
+   on Fireworks until Nov 30), trained on data our own system generates and labels. Gated.
+5. **Judge training data is logged from day one** so M9 costs little extra.
+6. **No non-Meta models in the product** (e.g. no DeepSeek router), even if cheaper.
 
 ---
 
@@ -12,212 +24,273 @@ Work milestone by milestone. After each milestone: run its acceptance check, com
 
 A tester uploads a screen recording (or phone video) of a bug while narrating it.
 ReproCam transcribes the narration, reads the video, works out the user's steps, finds the
-broken UI element, writes a Playwright test, **runs it**, and only declares the bug
-reproduced when the test fails *for the reason the tester described*. If the test passes or
-errors, the agent revises and retries (max 3). Output: failing test + highlighted
-screenshot + bug ticket. Against the fixed build, the same test passes.
-
-The verify loop is the heart of the project. Everything else serves it.
+broken UI element, writes a Playwright test, **runs it**, and only declares the bug reproduced
+when the test fails *for the reason the tester described*. Otherwise it revises and retries
+(max 3). Output: failing test + highlighted screenshot + bug ticket. Against the fixed build,
+the same test passes. **The verify loop is the heart of the project.**
 
 ---
 
 ## 1. Architecture
 
 ```
-video.mp4 ──ffmpeg──► audio.wav ──► Muse Voice Transcribe ──► transcript
-          └─ffmpeg──► keyframes/*.jpg ─┐
-store DOM snapshot (Playwright) ───────┼─► Muse Spark (vision) ──► steps.json + bug_claim
-                                       │
-video.mp4 + bug_claim.element ─────────┴─► SAM 3.1 ──► boxes per frame ──► evidence.png
-steps.json + DOM snapshot ──► Muse Spark ──► test_repro.py
-test_repro.py ──► pytest (sandboxed subprocess, timeout) ──► result
-result + bug_claim ──► Muse Spark "judge" ──► REPRODUCED | NOT_REPRODUCED | TEST_ERROR
-   └─ not reproduced / error → feedback to generator → retry (≤3)
-REPRODUCED ──► ticket.md + evidence.png + test file ──► run against ?fixed=1 → expect PASS
+video ──ffmpeg──► audio.wav ──► Muse Voice Transcribe ─────────► transcript
+      └─ffmpeg──► keyframes/*.jpg (≤24) ───┐
+store DOM map (Playwright) ────────────────┼─► Muse Spark [effort=low] ─► steps.json + bug_claim
+video + bug_claim.element ─────────────────┴─► SAM 3.1 ─► boxes ─► evidence.png
+steps + DOM map + feedback ──► Muse Spark Open [effort=low] ──► test_repro.py
+test_repro.py ──► pytest subprocess (timeout) ──► raw result
+raw result ──► rule judge ──(undecided)──► model judge (Muse Spark Open → or tuned Glimmer, M9)
+   └─ NOT_REPRODUCED / TEST_ERROR → feedback → testgen (≤3 attempts)
+REPRODUCED ──► ticket.md + evidence.png + test ──► re-run on ?fixed=1 → must PASS
+every judge decision ──► data/judge_log.jsonl (training data for M9)
 ```
 
 ### Folder layout (target)
 ```
-store/                 practice shop (static HTML/CSS/JS, no build step)
+store/                 practice shop (static HTML/CSS/JS)
 backend/
-  llm.py               provider switch (exists)
-  media.py             ffmpeg: audio extract (mono 16-bit WAV), keyframes (≤24)
-  transcribe.py        Muse Voice Transcribe one-shot endpoint
-  dom_snapshot.py      Playwright: visit store pages, emit compact element map
-  understand.py        Muse Spark: frames + transcript + DOM map -> steps + bug_claim
-  segment.py           SAM 3.1 video segmentation -> boxes; evidence.png
-  testgen.py           Muse Spark: write pytest-playwright test
-  runner.py            run test in subprocess w/ timeout, capture output + screenshot
-  judge.py             Muse Spark: did it fail for the claimed reason?
-  agent.py             orchestrates the loop, emits events
-  ticket.py            bug report markdown
-  budget.py            run cap + cache
-  api.py               FastAPI app
-web/                   ReproCam UI (single page)
-samples/               3 demo videos + cached runs
-runs/<id>/             per-run artifacts (gitignored except samples)
-tests/                 our own unit tests for parsers/judge logic
+  llm.py               provider switch (exists) + chat() helper: logs model, provider, effort,
+                       tokens, latency, cost estimate; backoff on 429/5xx only, never on 400
+  prompts/*.md         all prompts live here
+  media.py  transcribe.py  dom_snapshot.py  understand.py  segment.py
+  testgen.py  runner.py  judge.py  agent.py  ticket.py  budget.py  api.py
+web/                   ReproCam UI
+scripts/               check_env.py, preflight.py, effort_sweep.py, gen_judge_data.py, train_glimmer.py
+samples/               demo videos + cached runs
+data/                  judge_log.jsonl, judge_sft_train.jsonl, judge_sft_eval.jsonl
+runs/<id>/             per-run artifacts (gitignored)
+tests/                 tests/store/ (ground truth), tests/unit/
+docs/                  charts, architecture image, v1 plan
 ```
 
-### Data contracts (keep these stable; UI depends on them)
+### Data contracts (stable — UI depends on them)
 
 `steps.json`
 ```json
 {
   "app_url": "http://localhost:5173",
-  "steps": [
-    {"n": 1, "action": "goto|click|fill|select|press|wait",
-     "target": "human description", "selector_hint": "from DOM map or null",
-     "value": "text or null", "frame_ref": 3}
-  ],
-  "bug_claim": {
-    "summary": "Order total becomes negative after applying promo twice",
-    "expected": "Total stays >= 0 and promo applies once",
-    "actual": "Total shows -$12.40",
-    "element": "order total",
-    "frame_ref": 9
-  }
+  "steps": [{"n": 1, "action": "goto|click|fill|select|press|wait",
+             "target": "human description", "selector_hint": "data-testid from DOM map or null",
+             "value": null, "frame_ref": 3}],
+  "bug_claim": {"summary": "...", "expected": "...", "actual": "...",
+                "element": "order total", "frame_ref": 9}
 }
 ```
 
-Run events (Server-Sent Events, also saved to `runs/<id>/events.jsonl`)
+Run event (SSE + `runs/<id>/events.jsonl`)
 ```json
 {"t": 1.82, "stage": "transcribe|frames|understand|segment|testgen|run|judge|ticket|fixcheck",
- "status": "start|ok|fail|retry", "model": "muse-spark-1.3", "provider": "baseten",
- "attempt": 1, "detail": "short human text", "artifact": "relative/path or null"}
+ "status": "start|ok|fail|retry", "model": "muse-spark-open", "provider": "fireworks",
+ "effort": "low", "attempt": 1, "detail": "short human text", "artifact": null}
 ```
 
 Judge verdict
 ```json
-{"verdict": "REPRODUCED|NOT_REPRODUCED|TEST_ERROR", "reason": "...", "feedback_for_generator": "..."}
+{"verdict": "REPRODUCED|NOT_REPRODUCED|TEST_ERROR", "decided_by": "rule|model",
+ "reason": "...", "feedback_for_generator": "..."}
 ```
 
----
+Judge log row (`data/judge_log.jsonl`, one per judged run)
+```json
+{"bug_id": "neg_total", "bug_claim": {...}, "test_code": "...", "pytest_output": "...(trimmed 3k chars)",
+ "verdict": "...", "decided_by": "...",
+ "oracle": {"buggy": "pass|assert_fail|error", "fixed": "pass|assert_fail|error"}}
+```
 
-## 2. Milestones
-
-### M1 — Practice store with planted bugs  (Sat)
-Original fictional brand: **"Lumen & Loom"** (lamps and textiles). Must not resemble any real retailer.
-Pages: product list → product detail → cart → checkout → confirmation. Plain HTML/JS, served
-by `python -m http.server` or a tiny script on port 5173. Stable `data-testid` on key elements.
-
-Planted bugs, each toggled off by `?fixed=1` (persist the flag in localStorage):
-1. **Negative total:** promo `GLOW20` can be applied repeatedly; total goes below $0.
-2. **Quantity stepper:** "−" on quantity 1 sets 0 and the line still charges.
-3. **Checkout hang:** ZIP codes starting with `0` leave the "Place order" spinner forever.
-
-- [x] Store runs locally; all 3 bugs reproducible by hand; `?fixed=1` removes each
-- [x] Hand-written Playwright test per bug that fails on buggy, passes on fixed (`tests/store/`)
-      — these are our ground truth for judging ReproCam's output
-
-### M2 — Media + transcription  (Sat)
-- [ ] `media.py`: ffmpeg → `audio.wav` (mono, 16-bit PCM; check cookbook for sample rate) and
-      keyframes (scene-change detection, fallback 1 fps, cap 24, max 1280px wide)
-- [ ] `transcribe.py`: POST `https://api.meta.ai/v1/asr/transcribe`, `Authorization` header,
-      model `muse-voice-transcribe-1.0`. Port the request shape from cookbook
-      `06_muse_voice/01_voice_api_fundamentals/utils.py::transcribe_recording`.
-      Pass `keywords` = product names + "promo", "checkout", "ZIP".
-- [ ] Record 3 sample videos of the bugs with narration (Nur records; QuickTime screen + mic)
-- [ ] Acceptance: `python -m backend.media samples/bug1.mov` and transcript printed
-
-### M3 — Understanding: video → steps  (Sun)
-- [ ] `dom_snapshot.py`: crawl store pages, emit compact map
-      `[{page, testid, role, name, text}]` (≤ 4k tokens). This grounds selectors — the model
-      must pick selectors from this map, never invent them.
-- [ ] `understand.py`: Muse Spark with keyframes (base64 images) + transcript + DOM map,
-      **structured output** (JSON schema) → `steps.json`. See cookbook
-      `01_api_fundamentals/04_structured_output` and `07_vision_input`.
-- [ ] Acceptance: for all 3 samples, steps match the real flow (compare to M1 tests)
-
-### M4 — Test generation + runner + verify loop  (Sun → Mon)  ← the core
-- [ ] `testgen.py`: steps + DOM map + bug_claim → `test_repro.py` (pytest + playwright sync API).
-      Assertion must encode `expected`. Base URL from env. No sleeps > 2s; use expect().
-- [ ] `runner.py`: subprocess `pytest -x -q`, 60s timeout, capture stdout, failure message,
-      final screenshot; never run generated code outside this subprocess.
-- [ ] `judge.py`: classify result vs bug_claim (rules first: pass → NOT_REPRODUCED;
-      selector/timeout error unrelated to claim → TEST_ERROR; assertion failure → ask
-      Muse Spark whether it matches the claim).
-- [ ] `agent.py`: loop ≤3 attempts, feeding judge feedback into testgen. Emit events.
-- [ ] Fix check: run the final test with `?fixed=1` → must PASS.
-- [ ] Acceptance: ≥2 of 3 samples reach REPRODUCED and pass on fixed build, end-to-end, one command:
-      `python -m backend.agent samples/bug1.mov`
-- [ ] Demo-worthy moment: make sure at least one sample shows a retry (first test passes
-      wrongly → judge catches it → second attempt reproduces). Don't fake it; tune prompts or
-      pick the sample where it naturally happens, and log it honestly.
-
-### M5 — SAM 3.1 evidence  (Mon)
-- [ ] `segment.py`: upload video (`purpose=user_data`), concept = `bug_claim.element`,
-      parse with `meta_sam_parser` only (port from cookbook `07_sam/01_api_basics/python`).
-- [ ] Draw box/mask on the frame at `bug_claim.frame_ref` → `evidence.png`.
-- [ ] **Risk:** SAM is trained on natural images; UI text elements may segment poorly. Try it
-      first thing Monday. Fallback: ask Muse Spark for a bounding box on the frame (vision
-      grounding) and label it honestly in the UI. Do not block M4 on this.
-
-### M6 — API + UI  (Mon → Tue)
-- [ ] `api.py`: `POST /runs` (multipart video) → id; `GET /runs/{id}/events` (SSE);
-      `GET /runs/{id}` (final artifacts); `GET /samples`; `POST /samples/{id}/replay`
-      (replays cached events with original timing — zero API cost).
-- [ ] `budget.py`: `MAX_RUNS_PER_DAY` from env, per-IP limit, 25 MB / 90 s upload cap.
-- [ ] `web/`: one page. Left: video player. Right: live timeline of stages, each showing
-      model + provider badge (e.g. "Muse Spark Open · Baseten"). Bottom: test code with red/green
-      result, evidence image, ticket. Buttons: Upload video · Try a sample bug · Run against fixed build.
-      Mobile: upload uses `<input type="file" accept="video/*" capture>`.
-- [ ] Use the frontend-design approach: distinctive, not template-looking.
-
-### M7 — Deploy  (Tue)
-- [ ] Store → static host (Vercel or GitHub Pages).
-- [ ] Backend → Modal (Playwright + ffmpeg in the image) or any host that runs Chromium.
-- [ ] Public URL works from a phone; "Try a sample bug" works with no keys spent.
-- [ ] README: what it is, architecture diagram, Meta models used and where, how to run,
-      "100% built during the hackathon", demo link.
-
-### M8 — Polish + video  (Wed AM, freeze at noon)
-- [ ] Bug bash on the 3 samples + 1 fresh recording
-- [ ] Record the 3-min video (script below). Post on X. Submit.
+### Effort settings (`.env`)
+```
+EFFORT_UNDERSTAND=low
+EFFORT_TESTGEN=low
+EFFORT_JUDGE=low
+```
+Muse Spark Open does **not** accept `none`. `scripts/preflight.py` checks which effort levels and
+input types (text, image) each configured provider accepts before any sweep spends money.
 
 ---
 
-## 3. Model usage map (show this in README + video)
+## 2. Schedule at a glance
 
-| Stage | Model | Provider |
+| When | Milestones | Gate |
 |---|---|---|
-| Narration → text | Muse Voice Transcribe | Meta Model API |
-| Frames → steps & bug claim | Muse Spark (vision) | Meta API, or Muse Spark Open via Baseten if it accepts images |
-| Find broken element in video | SAM 3.1 | Meta Model API |
-| Write test, judge result | Muse Spark Open | Baseten (default) / Fireworks |
-
-`LLM_PROVIDER` switches the text stages. Log provider on every event so the open-weight
-bonus is provable.
+| Sat Oct 31 | M1 store · M2 media + transcribe | — |
+| Sun Nov 1 | M3 understanding · M4 verify loop (start) | — |
+| Mon Nov 2 | M4 finish · M4b effort sweep · M5 SAM | **M4 accepted by 11:59 PM → M9 allowed** |
+| Tue Nov 3 | M6 API + UI · M7 deploy · M9 Glimmer (stretch, parallel) | **M9 hard stop 6:00 PM** |
+| Wed Nov 4 | M8 polish, video, X post, submit | **Code freeze 12:00 PM** |
 
 ---
 
-## 4. Working rules for Claude Code
-- Small commits, one per milestone minimum. Never commit `.env`, keys, or `runs/` (except samples).
-- Before writing an integration, read the matching cookbook recipe:
-  https://github.com/meta-models/meta-model-cookbook (clone to a scratch dir outside the repo).
-- Retries with backoff on 429/5xx only; never retry 400.
-- Every model call goes through one helper that logs model, provider, tokens, latency, and cost estimate.
-- Keep prompts in `backend/prompts/*.md`, not inline strings.
-- If something is blocked > 30 min, stop and report with options instead of hacking around it.
+## 3. Milestones
+
+### M1 — Practice store with planted bugs (Sat)
+Original fictional brand **"Lumen & Loom"** (lamps and textiles). Must not resemble any real retailer.
+Pages: list → detail → cart → checkout → confirmation. Plain HTML/JS on port 5173.
+Stable `data-testid` on every interactive/asserted element.
+
+Demo bugs (each switched off by `?fixed=1`, persisted in localStorage):
+1. `neg_total` — promo `GLOW20` can be applied repeatedly; total goes below $0.
+2. `qty_stepper` — "−" at quantity 1 gives 0 but still charges, or "+" adds 2.
+3. `zip_hang` — ZIPs starting with `0` leave "Place order" spinning forever.
+
+Implement bugs behind a registry (`store/bugs.js`: `{id: enabled}`) so M9 can add more quickly.
+
+- [x] Store runs; 3 bugs reproducible by hand; `?fixed=1` removes each
+- [x] `tests/store/`: hand-written test per bug — fails on buggy, passes on fixed (ground truth)
+
+### M2 — Media + transcription (Sat)
+- [ ] `media.py`: ffmpeg → `audio.wav` (mono 16-bit PCM; sample rate per cookbook) and keyframes
+      (scene-change, fallback 1 fps, cap 24, ≤1280 px wide, JPEG)
+- [ ] `transcribe.py`: POST `https://api.meta.ai/v1/asr/transcribe`, `Authorization` header,
+      model `muse-voice-transcribe-1.0`; port from cookbook `06_muse_voice/01_voice_api_fundamentals/utils.py`.
+      `keywords` = product names + "promo", "checkout", "ZIP".
+- [ ] `scripts/preflight.py` (efforts + image input per provider; prints a table)
+- [ ] Nur records 3 narrated sample videos (QuickTime screen + mic) → `samples/`
+- [ ] Acceptance: `python -m backend.media samples/bug1.mov` prints transcript + frame count
+
+### M3 — Understanding: video → steps (Sun)
+- [ ] `dom_snapshot.py`: crawl store, compact map `[{page, testid, role, name, text}]` (≤4k tokens).
+      The model must choose selectors from this map, never invent them.
+- [ ] `understand.py`: keyframes (base64 images) + transcript + DOM map → structured output
+      (JSON schema) → `steps.json`. Cookbook refs: `01_api_fundamentals/04_structured_output`, `07_vision_input`.
+- [ ] Acceptance: all 3 samples produce steps matching the real flow (compare to `tests/store/`)
+
+### M4 — Test generation + runner + verify loop (Sun → Mon) ← core
+- [ ] `testgen.py`: steps + DOM map + bug_claim (+ judge feedback) → `test_repro.py`
+      (pytest + Playwright sync API, `expect()`, no sleeps > 2 s, base URL from env, `?fixed` from env)
+- [ ] `runner.py`: subprocess `pytest -x -q`, 60 s timeout, capture output, failure message,
+      final screenshot. Generated code only ever runs inside this subprocess.
+- [ ] `judge.py`, rule layer first:
+      - passed → `NOT_REPRODUCED`
+      - error that isn't an assertion (selector not found, timeout before assertion, syntax) → `TEST_ERROR`
+      - assertion failure → model judge: does the failure match `bug_claim`? (Muse Spark Open, effort low)
+- [ ] `agent.py`: ≤3 attempts, judge feedback into testgen, events emitted, every verdict logged to
+      `data/judge_log.jsonl` **including the oracle** (re-run the same test on `?fixed=1`).
+- [ ] Fix check: final test on `?fixed=1` must PASS.
+- [ ] Acceptance: ≥2 of 3 samples reach REPRODUCED and pass on fixed, via
+      `python -m backend.agent samples/bug1.mov`
+- [ ] Honest retry moment: at least one sample naturally shows judge catching a wrong first test.
+      Never fake it.
+
+### M4b — Effort sweep (Mon, ~1 h)
+- [ ] `scripts/effort_sweep.py`: for each of the 3 samples × efforts {low, medium, high}, run the
+      pipeline from cached `steps.json` (skip transcription/understanding to save money).
+      Deterministic score: REPRODUCED **and** passes on fixed. Record attempts, tokens, cost, seconds.
+- [ ] Cache to `data/effort_sweep.jsonl` (resume on rerun). Chart → `docs/effort_sweep.png`.
+- [ ] Set `.env` defaults from the result. Read 10 outputs by hand before trusting the chart.
+
+### M5 — SAM 3.1 evidence (Mon)
+- [ ] `segment.py`: upload video (`purpose=user_data`), concept = `bug_claim.element`, parse with
+      `meta_sam_parser` only (port from cookbook `07_sam/01_api_basics/python`).
+- [ ] Draw box/mask on frame `bug_claim.frame_ref` → `evidence.png`.
+- [ ] Risk: UI text may segment poorly. Test first thing Monday. Fallback: Muse Spark returns a box on
+      the frame; UI labels which model produced it. Never block M4 on this.
+
+### M6 — API + UI (Tue)
+- [ ] `api.py`: `POST /runs` (multipart) → id; `GET /runs/{id}/events` (SSE); `GET /runs/{id}`;
+      `GET /samples`; `POST /samples/{id}/replay` (replays cached events with original timing, $0).
+- [ ] `budget.py`: `MAX_RUNS_PER_DAY`, per-IP limit, 25 MB / 90 s upload cap. (Meta's Spend Limit is only an alert.)
+- [ ] `web/`: one page. Left: video. Right: live stage timeline with badges "model · provider · effort".
+      Bottom: test code red/green, evidence image, ticket. Buttons: Upload · Try a sample bug ·
+      Run against fixed build. Mobile upload: `<input type="file" accept="video/*" capture>`.
+      Distinctive design, not a template look.
+
+### M7 — Deploy (Tue)
+- [ ] Store → Vercel or GitHub Pages. Backend → Modal (Chromium + ffmpeg in image).
+- [ ] Public URL works on a phone; "Try a sample bug" works with zero API spend.
+- [ ] README: what/why, architecture image, model map (section 4), effort chart, M9 results if done,
+      run instructions, "100% built during the hackathon", demo link.
+
+### M8 — Polish + video (Wed AM → submit)
+- [ ] Bug bash: 3 samples + 1 fresh recording. Freeze at noon.
+- [ ] Record video (section 6). Post on X. Submit with repo, video, X link.
+
+### M9 — STRETCH: Muse Glimmer as a trained verification judge (Tue, gated)
+**Gate:** start only if M4 is accepted by Mon 11:59 PM. **Hard stop:** Tue 6:00 PM — if not done,
+ship without it and list it in the roadmap. Runs in parallel with M6/M7.
+
+Why: deciding "did this test fail for the claimed reason?" is the hardest call in the product.
+In development we have a perfect oracle (buggy vs fixed build). In real use there's no fixed build —
+so we distill the oracle into a small specialized Meta open-weight model.
+
+Labels from the oracle (deterministic, no LLM):
+| buggy run | fixed run | label |
+|---|---|---|
+| assertion failure | pass | REPRODUCED |
+| pass | pass | NOT_REPRODUCED |
+| error (non-assertion) | any | TEST_ERROR |
+| assertion failure | assertion failure | NOT_REPRODUCED (wrong reason) |
+
+Steps:
+- [ ] Add 5 **training-only** bugs to the store registry (e.g. wrong tax rounding, sale badge on
+      full-price item, cart count off by one after removal, sort-by-price ignores sale price,
+      wishlist heart doesn't persist). Demo bugs 1–3 are **never** in training data (held out → honest eval).
+- [ ] `scripts/gen_judge_data.py`: for each training bug, have Muse Spark Open write test variants on
+      purpose: correct repro · wrong assertion · missing step · broken selector · asserts unrelated
+      thing · passes trivially. Run each on buggy + fixed, label via table. Target ~600 rows, balanced.
+      Resume-safe, cached, cost-capped.
+- [ ] Format: chat JSONL `{"messages":[system, user, assistant]}`; assistant = compact JSON verdict.
+      System prompt gives the schema, not the rules. No near-duplicates across train/eval.
+- [ ] Eval set: all logged runs on demo bugs 1–3 (from M4/M4b) + 40 held-out generated rows.
+- [ ] `scripts/train_glimmer.py`: Fireworks serverless training, `muse-glimmer-30b` + LoRA rank 8,
+      SFT (free for jobs started before Dec 1). Follow `github.com/fw-ai/cookbook` SFT router notebook.
+- [ ] Eval: exact-match accuracy of base Glimmer vs tuned Glimmer vs Muse Spark Open judge, same
+      decoding. Chart → `docs/judge_eval.png`. Read 10 predictions by hand.
+- [ ] Serving: on-demand deployment is billed (not covered by the free promo). Deploy only for the
+      eval and video recording; replay cached runs on the public site; delete deployment after
+      (`--ignore-checks` if it served in the last hour). Add `JUDGE_PROVIDER=glimmer` switch.
+- [ ] Acceptance: tuned Glimmer beats base Glimmer on held-out demo bugs; numbers in README, honest
+      even if it doesn't beat Muse Spark Open.
 
 ---
 
-## 5. Demo video script (3:00)
-- 0:00 One line: "Everything shown was built during the hackathon."
-- 0:05 Phone films a laptop: tester applies promo twice, says "the total just went negative."
-- 0:15 Cut to ReproCam: upload → live timeline lights up stage by stage with model badges.
-- 0:50 First test passes → judge: "NOT_REPRODUCED — test never applied promo twice" → retry.
-- 1:20 Second test fails red: `expected total >= 0, got -12.40` → REPRODUCED. Evidence image with SAM box.
-- 1:45 Click "Run against fixed build" → green. "Every bug report is now a regression test."
-- 2:10 Second bug, sped up.
-- 2:30 Architecture slide: 3 Meta models, open weights on Baseten, verify loop.
-- 2:50 Who it's for + next: native mobile, CI integration.
+## 4. Model usage map (README + video)
 
----
+| Stage | Model | Provider | Notes |
+|---|---|---|---|
+| Narration → text | Muse Voice Transcribe | Meta Model API | keywords biasing |
+| Frames → steps & bug claim | Muse Spark (vision) | Meta API or Muse Spark Open on Fireworks/Baseten | images only, effort per M4b |
+| Find broken element | SAM 3.1 | Meta Model API | video tracking |
+| Write test | Muse Spark Open | Fireworks / Baseten | effort per M4b |
+| Judge | Muse Spark Open → **tuned Muse Glimmer 30B** (M9) | Fireworks | rules first |
 
-## 6. First prompt to give Claude Code
+Provider ids: Fireworks `accounts/fireworks/models/muse-spark-open` · Baseten `meta-models/muse-spark-open-1026`
+· Glimmer training base `accounts/fireworks/models/muse-glimmer-30b` (training only, not serverless).
 
-> Read CLAUDE.md and BUILD_PLAN.md. Start M1: build the Lumen & Loom practice store in
-> `store/` with the 3 planted bugs and the `?fixed=1` toggle, plus hand-written Playwright
-> tests in `tests/store/` that fail on buggy and pass on fixed. Run the tests to prove it,
+## 5. Prize map
+
+| Prize | What earns it |
+|---|---|
+| Indie track (Impact, Tooling, Depth, Demo) | M4 loop + M6 UI + M8 video |
+| Best Agentic Use-Case ($5K) | self-correcting verify loop, retries, real actions |
+| Best Open-Weight Build ($10K) | Muse Spark Open on Fireworks/Baseten everywhere + tuned Glimmer judge (M9) |
+| Most Viral ($20K) | X post of the "phone video → red test" moment, through Nov 8 |
+| Community Vote ($10K) | Discord + X push when voting opens Nov 9 |
+
+## 6. Working rules for Claude Code
+- Small commits, ≥1 per milestone. Never commit `.env`, keys, `runs/`. Commit `data/*.jsonl` only if < 5 MB.
+- Read the matching cookbook recipe before each integration (clone outside the repo):
+  Meta `github.com/meta-models/meta-model-cookbook` · Fireworks `github.com/fw-ai/cookbook`.
+- Measure before tuning: deterministic graders, held-out data, read outputs by hand. Loss ≠ accuracy.
+- Every paid sweep: cached to JSONL, resumable, prints projected cost before running.
+- Blocked > 30 min → stop and report options.
+
+## 7. Demo video script (3:00)
+- 0:00 "Everything shown was built during this hackathon."
+- 0:05 Phone films laptop: promo applied twice, "the total just went negative."
+- 0:15 Upload → timeline lights up with "model · provider · effort" badges.
+- 0:50 First test passes → judge: NOT_REPRODUCED, "never applied promo twice" → retry.
+- 1:15 Second test fails red: `expected total >= 0, got -12.40` → REPRODUCED. SAM evidence box.
+- 1:35 "Run against fixed build" → green. "Every bug report becomes a regression test."
+- 1:50 Second bug, sped up.
+- 2:10 Under the hood: effort chart ("low effort was best for us — measured") and, if M9 done,
+  "we trained Muse Glimmer into our judge: X% → Y% on bugs it never saw."
+- 2:40 Architecture: Voice Transcribe · Muse Spark · SAM 3.1 · Muse Spark Open · Glimmer.
+- 2:50 Who it's for + next: CI integration, native mobile.
+
+## 8. First prompt to give Claude Code
+
+> Read CLAUDE.md and BUILD_PLAN.md (v2). Start M1: build the Lumen & Loom practice store in
+> `store/` with the 3 demo bugs behind a bug registry and the `?fixed=1` toggle, plus hand-written
+> Playwright tests in `tests/store/` that fail on buggy and pass on fixed. Run them to prove it,
 > commit, tick the M1 boxes, and report back.

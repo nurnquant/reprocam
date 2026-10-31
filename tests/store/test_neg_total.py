@@ -1,4 +1,4 @@
-"""Bug 1: promo GLOW20 can be applied repeatedly and the total goes below $0."""
+"""neg_total: promo GLOW20 can be applied repeatedly and the total goes below $0."""
 from playwright.sync_api import expect
 
 from conftest import add_product_to_basket, money

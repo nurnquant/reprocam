@@ -1,6 +1,6 @@
 # ReproCam — project memory for Claude Code
 
-**Work order:** see `BUILD_PLAN.md` (milestones, contracts, acceptance checks). Follow it in order.
+**Work order:** see `BUILD_PLAN.md` (v2: milestones, contracts, gates, acceptance checks). Follow it in order.
 
 ## What we're building
 Hackathon entry (Meta Global AI Developer Hackathon, deadline **Wed Nov 4, 9:00 PM ET**).
