@@ -14,6 +14,7 @@ type of the first failure, which is what the judge's rules need:
 """
 import base64
 import inspect
+import json
 import os
 from pathlib import Path
 
@@ -120,6 +121,8 @@ def run_test(code: str, workdir: str | Path, app_url: str, fixed: bool) -> dict:
             shot.write_bytes(base64.b64decode(png))
             result["screenshot"] = str(shot)
         (workdir / "test_repro.py").write_text(code)
+        # same files as a local run, so run summaries (and the UI) read results the same way
+        (workdir / "result.json").write_text(json.dumps({k: result.get(k) for k in ("outcome", "phase", "exc_type", "message")}))
     else:
         result = execute(code, PLUGIN, workdir, app_url, fixed, ACTION_TIMEOUT_MS, TIMEOUT_S)
     result["message"] = _scrub(result.get("message") or "")

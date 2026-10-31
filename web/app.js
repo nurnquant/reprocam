@@ -81,8 +81,16 @@ function reset(label) {
 
 function listen(url) {
   state.source = new EventSource(url);
-  state.source.onmessage = (m) => { state.next += 1; onEvent(JSON.parse(m.data)); };
-  state.source.addEventListener("done", (m) => { state.source.close(); onDone(JSON.parse(m.data)); });
+  // Handle events strictly in order: onEvent awaits a summary fetch on live runs, and a finished run
+  // (/?run=<id>) delivers all its events at once.
+  let queue = Promise.resolve();
+  const inOrder = (fn) => { queue = queue.then(fn).catch((e) => console.warn(e)); };
+  state.source.onmessage = (m) => { state.next += 1; const e = JSON.parse(m.data); inOrder(() => onEvent(e)); };
+  state.source.addEventListener("done", (m) => {
+    state.source.close();
+    const result = JSON.parse(m.data);
+    inOrder(() => onDone(result));
+  });
   state.source.onerror = () => { if (state.source.readyState === EventSource.CLOSED) return; };
 }
 
@@ -95,6 +103,19 @@ async function startReplay(id) {
   const { events } = await api(`/samples/${id}/replay`, { method: "POST" });
   state.eventsUrl = events;
   listen(`${events}?speed=${state.speed}`);
+}
+
+async function openRun(id) {
+  // A finished (or still running) live run, e.g. from a shared /?run=<id> link.
+  reset(`live run · ${id}`);
+  Object.assign(state, { kind: "runs", id });
+  setSpeedButtons(false);
+  try {
+    showVideo((await refresh()).video_url);
+    listen(`/runs/${id}/events`);
+  } catch (e) {
+    toast(`Can't open run ${id}: ${e.message}`);
+  }
 }
 
 function replayTime() {
@@ -127,6 +148,7 @@ async function startUpload(file) {
     Object.assign(state, { kind: "runs", id: r.id });
     $("vf-label").textContent = `live run · ${r.id}`;
     toast(`Live run started. ${r.left_for_you} left for you today.`);
+    history.replaceState(null, "", `?run=${r.id}`);  // the address bar is now a shareable link to this run
     listen(r.events);
   } catch (e) {
     $("vf-label").textContent = "not started";
@@ -208,10 +230,12 @@ async function onEvent(e) {
   }
   if (e.stage === "run") {
     if (e.status === "start") stamp("stamp-buggy", "running");
-    else if (attempt?.buggy) {
-      stamp("stamp-buggy", attempt.buggy.outcome === "pass" ? "pass" : "fail");
-      $("failure").textContent = attempt.buggy.summary.replaceAll(" | ", "\n");
-      highlightFailure(attempt.buggy.summary);
+    else {
+      // the event itself says how the run ended; the attempt's result file adds the full failure text
+      const summary = attempt?.buggy?.summary ?? (e.detail || "").replace(/^\w+: /, "");
+      stamp("stamp-buggy", e.status === "ok" ? "pass" : "fail");
+      $("failure").textContent = e.status === "ok" ? "" : summary.replaceAll(" | ", "\n");
+      if (e.status !== "ok") highlightFailure(summary);
     }
   }
   if (e.stage === "fixcheck") stamp("stamp-fixed", e.status === "ok" ? "pass" : "fail");
@@ -241,7 +265,7 @@ function onDone(result) {
   $("foot-cost").textContent = state.kind === "samples"
     ? `original run: ${result.seconds}s · ${cost} · this replay: $0`
     : `${result.seconds}s · ${cost}`;
-  if (state.kind === "samples") $("clock").textContent = fmtClock(result.seconds);
+  if (result.seconds != null) $("clock").textContent = fmtClock(result.seconds);
 }
 
 // ---------- recording ----------
@@ -455,4 +479,5 @@ $("fix-btn").onclick = async () => {
 loadSamples().then(() => {
   const q = new URLSearchParams(location.search);
   if (q.get("sample")) startReplay(q.get("sample"));
+  else if (q.get("run")) openRun(q.get("run"));
 }).catch((e) => toast(`Can't reach the ReproCam API: ${e.message}`));

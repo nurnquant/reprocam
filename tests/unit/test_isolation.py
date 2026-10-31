@@ -28,3 +28,18 @@ def test_sandbox_entry_point_serves_the_store_and_reports(tmp_path):
     result = json.loads(line.removeprefix("@@RESULT@@"))
     assert result["outcome"] == "pass", result["message"]
     assert result["screenshot_png"]  # the screenshot travels back as base64
+
+
+def test_sandbox_branch_writes_the_same_files_as_a_local_run(tmp_path, monkeypatch):
+    import base64
+
+    import backend.modal_sandbox as ms
+    png = base64.b64encode(b"\x89PNG fake").decode()
+    monkeypatch.setenv("REPRO_SANDBOX", "modal")
+    monkeypatch.setattr(ms, "run_in_sandbox", lambda *a: {"outcome": "assert_fail", "phase": "call", "exc_type": "AssertionError",
+                                                         "message": "Actual value: 1", "output": "", "fixed": False,
+                                                         "seconds": 1.0, "screenshot": "/work/x.png", "screenshot_png": png})
+    r = run_test("code", tmp_path, "http://localhost:5173", fixed=False)
+    assert json.loads((tmp_path / "result.json").read_text())["outcome"] == "assert_fail"
+    assert (tmp_path / "test_repro.py").read_text() == "code"
+    assert Path(r["screenshot"]).read_bytes() == b"\x89PNG fake"

@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parent.parent
 REMOTE = "/root/reprocam"
 
 # Never ship secrets, local runs, recordings (samples/<id>/video.mp4 is the web copy) or dev files.
-IGNORE = [".env", "**/.env", ".venv", ".git", "runs", "**/__pycache__", ".pytest_cache", "samples/*.mov",
+IGNORE = [".env", ".env.*", "**/.env", "**/.env.*", ".venv", ".git", "runs", "**/__pycache__", ".pytest_cache", "samples/*.mov",
           "docs", "tests", "deploy", "data/llm_calls.jsonl", "data/judge_log.jsonl", "**/.DS_Store"]
 
 web_image = (

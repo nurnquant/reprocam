@@ -46,6 +46,8 @@ STORE_MODE=fixed pytest tests/store   # 3 passed
 ```
 
 ## Deploy (Modal)
+Live: **https://admin-34790--reprocam-web.us-east.modal.run** (practice store: `/store/`). A finished live run opens at `/?run=<id>`.
+
 One public URL: the app at `/`, the practice store at `/store/`.
 ```bash
 uv pip install modal "cbor2<6"          # cbor2 6.x has no wheel for Intel Macs

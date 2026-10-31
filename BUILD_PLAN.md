@@ -231,8 +231,13 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
       Live upload path covered by API tests for rejections only; a real browser upload run is still to do.
 
 ### M7 — Deploy (Tue)
-- [ ] Store → Vercel or GitHub Pages. Backend → Modal (Chromium + ffmpeg in image).
-- [ ] Public URL works on a phone; "Try a sample bug" works with zero API spend.
+- [x] Store → Vercel or GitHub Pages. Backend → Modal (Chromium + ffmpeg in image).
+      Done Sun (changed by Nur): one Modal app serves both, store at /store/. Generated tests run in a Modal
+      Sandbox (no network, store served inside it, no secrets, 120 s, 1 CPU / 2 GiB). Keys in the
+      reprocam-keys Secret. URL: https://admin-34790--reprocam-web.us-east.modal.run
+- [x] Public URL works on a phone; "Try a sample bug" works with zero API spend.
+      Checked in iPhone 13 emulation (not a real phone yet); replays leave the budget untouched; one live upload
+      verified end to end on the deployed app ($0.037).
 - [ ] README: what/why, architecture image, model map (section 4), effort chart, M9 results if done,
       run instructions, "100% built during the hackathon", demo link.
 

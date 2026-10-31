@@ -5,6 +5,7 @@
 POST /runs                      upload a video (multipart "video") -> {id, events}
 GET  /runs/{id}/events          Server-Sent Events, live, until the run's result is written
 GET  /runs/{id}                 run summary: result, steps, test, verdict, evidence, ticket
+GET  /runs/{id}/video           the uploaded recording (the UI opens finished runs at /?run=<id>)
 POST /runs/{id}/fixcheck        re-run the run's test on the fixed build (?fixed=1); no model calls
 GET  /samples                   cached sample runs
 POST /samples/{id}/replay       -> {events}: where to stream the replay from
@@ -104,12 +105,17 @@ def summary(d: Path, kind: str) -> dict:
         "transcript": transcript and transcript.get("transcript", "").strip(),
         "keyframes": [{"n": f["n"], "t": f["t"], "url": base + f["path"]} for f in (frames or {}).get("frames", [])
                       if (d / f["path"]).exists()],
-        "video_url": base + "video.mp4" if (d / "video.mp4").exists() else None,
+        "video_url": base + "video.mp4" if (d / "video.mp4").exists() else
+                     (f"/runs/{d.name}/video" if kind == "runs" and _upload(d.name) else None),
         "attempts": attempts, "segment": seg,
         "evidence_url": base + "evidence.png" if (d / "evidence.png").exists() else None,
         "ticket_md": (d / "ticket.md").read_text() if (d / "ticket.md").exists() else None,
         "files_base": base,
     }
+
+
+def _upload(rid: str) -> Path | None:
+    return next((RUNS / "_uploads").glob(f"{rid}.*"), None) if ID.match(rid) else None
 
 
 def _sse(obj, event: str | None = None) -> str:
@@ -164,6 +170,15 @@ async def create_run(request: Request, video: UploadFile):
 
     threading.Thread(target=work, daemon=True).start()
     return {"id": rid, "events": f"/runs/{rid}/events", **left}
+
+
+@app.get("/runs/{rid}/video")
+def run_video(rid: str):
+    """The uploaded recording of a live run (for /?run=<id> links)."""
+    f = _upload(rid)
+    if not f:
+        raise HTTPException(404, "not found")
+    return FileResponse(f)
 
 
 @app.get("/runs/{rid}/events")
