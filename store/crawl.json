@@ -1,0 +1,10 @@
+{
+  "about": "Walk ReproCam's dom_snapshot takes through this app, in one browser session so state carries over. Each page is mapped after its actions run.",
+  "pages": [
+    {"path": "index.html"},
+    {"path": "product.html?id=linen-towels", "actions": [{"click": "add-to-cart"}]},
+    {"path": "cart.html", "actions": [{"fill": "promo-input", "value": "GLOW20"}, {"click": "promo-apply"}]},
+    {"path": "checkout.html"},
+    {"path": "confirmation.html"}
+  ]
+}

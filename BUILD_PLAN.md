@@ -166,11 +166,11 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
 - [x] Acceptance: `python -m backend.media samples/bug1.mov` prints transcript + frame count
 
 ### M3 — Understanding: video → steps (Sun)
-- [ ] `dom_snapshot.py`: crawl store, compact map `[{page, testid, role, name, text}]` (≤4k tokens).
+- [x] `dom_snapshot.py`: crawl store, compact map `[{page, testid, role, name, text}]` (≤4k tokens).
       The model must choose selectors from this map, never invent them.
-- [ ] `understand.py`: keyframes (base64 images) + transcript + DOM map → structured output
+- [x] `understand.py`: keyframes (base64 images) + transcript + DOM map → structured output
       (JSON schema) → `steps.json`. Cookbook refs: `01_api_fundamentals/04_structured_output`, `07_vision_input`.
-- [ ] Acceptance: all 3 samples produce steps matching the real flow (compare to `tests/store/`)
+- [ ] Acceptance: all 3 samples produce steps matching the real flow (compare to `tests/store/`) — bug1 matches (2 runs); bug2, bug3 wait for recordings
 
 ### M4 — Test generation + runner + verify loop (Sun → Mon) ← core
 - [ ] `testgen.py`: steps + DOM map + bug_claim (+ judge feedback) → `test_repro.py`

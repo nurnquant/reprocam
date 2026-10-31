@@ -6,16 +6,13 @@ the store address; if it points at localhost and nothing is listening, the store
 started for the test session.
 """
 import os
-import socket
 import sys
-import threading
-from urllib.parse import urlparse
 
 import pytest
 from playwright.sync_api import expect
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"))
-from serve_store import make_server  # noqa: E402
+from serve_store import store_running  # noqa: E402
 
 APP_URL = os.getenv("APP_URL", "http://localhost:5173").rstrip("/")
 STORE_MODE = os.getenv("STORE_MODE", "buggy")
@@ -23,22 +20,10 @@ STORE_MODE = os.getenv("STORE_MODE", "buggy")
 expect.set_options(timeout=3000)
 
 
-def _listening(host: str, port: int) -> bool:
-    with socket.socket() as s:
-        s.settimeout(0.5)
-        return s.connect_ex((host, port)) == 0
-
-
 @pytest.fixture(scope="session", autouse=True)
 def store_server():
-    url = urlparse(APP_URL)
-    if url.hostname not in ("localhost", "127.0.0.1") or _listening("127.0.0.1", url.port or 80):
+    with store_running(APP_URL):
         yield
-        return
-    server = make_server(url.port or 80)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    yield
-    server.shutdown()
 
 
 @pytest.fixture

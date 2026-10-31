@@ -1,0 +1,386 @@
+[
+ {
+  "page": "*",
+  "testid": "nav-home",
+  "role": "link",
+  "text": "Lumen & Loom"
+ },
+ {
+  "page": "index",
+  "testid": "nav-cart",
+  "role": "link",
+  "text": "Basket 0"
+ },
+ {
+  "page": "index",
+  "testid": "cart-count",
+  "within": "nav-cart",
+  "text": "0"
+ },
+ {
+  "page": "index",
+  "testid": "product-grid"
+ },
+ {
+  "page": "index",
+  "testid": "product-card-ember-dome",
+  "within": "product-grid",
+  "role": "link",
+  "text": "LAMP Ember Dome Table Lamp $89.00"
+ },
+ {
+  "page": "index",
+  "testid": "product-name",
+  "within": "product-card-ember-dome",
+  "text": "Ember Dome Table Lamp"
+ },
+ {
+  "page": "index",
+  "testid": "product-price",
+  "within": "product-card-ember-dome",
+  "text": "$89.00"
+ },
+ {
+  "page": "index",
+  "testid": "product-card-reed-arc",
+  "within": "product-grid",
+  "role": "link",
+  "text": "LAMP Reed Arc Floor Lamp $145.00"
+ },
+ {
+  "page": "index",
+  "testid": "product-name",
+  "within": "product-card-reed-arc",
+  "text": "Reed Arc Floor Lamp"
+ },
+ {
+  "page": "index",
+  "testid": "product-price",
+  "within": "product-card-reed-arc",
+  "text": "$145.00"
+ },
+ {
+  "page": "index",
+  "testid": "product-card-pebble-light",
+  "within": "product-grid",
+  "role": "link",
+  "text": "LAMP Pebble Night Light $18.50"
+ },
+ {
+  "page": "index",
+  "testid": "product-name",
+  "within": "product-card-pebble-light",
+  "text": "Pebble Night Light"
+ },
+ {
+  "page": "index",
+  "testid": "product-price",
+  "within": "product-card-pebble-light",
+  "text": "$18.50"
+ },
+ {
+  "page": "index",
+  "testid": "product-card-saltmarsh-throw",
+  "within": "product-grid",
+  "role": "link",
+  "text": "TEXTILE Saltmarsh Wool Throw $64.00"
+ },
+ {
+  "page": "index",
+  "testid": "product-name",
+  "within": "product-card-saltmarsh-throw",
+  "text": "Saltmarsh Wool Throw"
+ },
+ {
+  "page": "index",
+  "testid": "product-price",
+  "within": "product-card-saltmarsh-throw",
+  "text": "$64.00"
+ },
+ {
+  "page": "index",
+  "testid": "product-card-linen-towels",
+  "within": "product-grid",
+  "role": "link",
+  "text": "TEXTILE Linen Tea Towels, Set of 2 $27.60"
+ },
+ {
+  "page": "index",
+  "testid": "product-name",
+  "within": "product-card-linen-towels",
+  "text": "Linen Tea Towels, Set of 2"
+ },
+ {
+  "page": "index",
+  "testid": "product-price",
+  "within": "product-card-linen-towels",
+  "text": "$27.60"
+ },
+ {
+  "page": "index",
+  "testid": "product-card-indigo-cushion",
+  "within": "product-grid",
+  "role": "link",
+  "text": "TEXTILE Indigo Weave Cushion Cover $32.00"
+ },
+ {
+  "page": "index",
+  "testid": "product-name",
+  "within": "product-card-indigo-cushion",
+  "text": "Indigo Weave Cushion Cover"
+ },
+ {
+  "page": "index",
+  "testid": "product-price",
+  "within": "product-card-indigo-cushion",
+  "text": "$32.00"
+ },
+ {
+  "page": "*",
+  "testid": "build-mode",
+  "text": "build: buggy"
+ },
+ {
+  "page": "*",
+  "testid": "nav-cart",
+  "role": "link",
+  "text": "Basket 1"
+ },
+ {
+  "page": "*",
+  "testid": "cart-count",
+  "within": "nav-cart",
+  "text": "1"
+ },
+ {
+  "page": "product",
+  "testid": "product-detail"
+ },
+ {
+  "page": "product",
+  "testid": "product-title",
+  "within": "product-detail",
+  "role": "heading",
+  "text": "Linen Tea Towels, Set of 2"
+ },
+ {
+  "page": "product",
+  "testid": "product-price",
+  "within": "product-detail",
+  "text": "$27.60"
+ },
+ {
+  "page": "product",
+  "testid": "add-to-cart",
+  "within": "product-detail",
+  "role": "button",
+  "text": "Add to basket"
+ },
+ {
+  "page": "product",
+  "testid": "added-message",
+  "within": "product-detail",
+  "text": "Added to your basket. View basket"
+ },
+ {
+  "page": "product",
+  "testid": "view-cart",
+  "within": "added-message",
+  "role": "link",
+  "text": "View basket"
+ },
+ {
+  "page": "cart",
+  "testid": "cart"
+ },
+ {
+  "page": "cart",
+  "testid": "cart-line-linen-towels",
+  "within": "cart"
+ },
+ {
+  "page": "cart",
+  "testid": "line-name",
+  "within": "cart-line-linen-towels",
+  "text": "Linen Tea Towels, Set of 2"
+ },
+ {
+  "page": "cart",
+  "testid": "qty-minus",
+  "within": "cart-line-linen-towels",
+  "role": "button",
+  "name": "Decrease Linen Tea Towels, Set of 2",
+  "text": "\u2212"
+ },
+ {
+  "page": "cart",
+  "testid": "line-qty",
+  "within": "cart-line-linen-towels",
+  "text": "1"
+ },
+ {
+  "page": "cart",
+  "testid": "qty-plus",
+  "within": "cart-line-linen-towels",
+  "role": "button",
+  "name": "Increase Linen Tea Towels, Set of 2",
+  "text": "+"
+ },
+ {
+  "page": "cart",
+  "testid": "line-total",
+  "within": "cart-line-linen-towels",
+  "text": "$27.60"
+ },
+ {
+  "page": "cart",
+  "testid": "line-remove",
+  "within": "cart-line-linen-towels",
+  "role": "button",
+  "text": "Remove"
+ },
+ {
+  "page": "cart",
+  "testid": "promo-form",
+  "within": "cart",
+  "role": "form",
+  "text": "Promo code Apply"
+ },
+ {
+  "page": "cart",
+  "testid": "promo-input",
+  "within": "promo-form",
+  "role": "textbox",
+  "name": "Promo code"
+ },
+ {
+  "page": "cart",
+  "testid": "promo-apply",
+  "within": "promo-form",
+  "role": "button",
+  "text": "Apply"
+ },
+ {
+  "page": "cart",
+  "testid": "promo-message",
+  "within": "cart",
+  "role": "status",
+  "text": "GLOW20 applied: $20.00 off."
+ },
+ {
+  "page": "cart",
+  "testid": "cart-subtotal",
+  "within": "cart",
+  "text": "$27.60"
+ },
+ {
+  "page": "cart",
+  "testid": "discount-total",
+  "within": "cart",
+  "text": "-$20.00"
+ },
+ {
+  "page": "cart",
+  "testid": "order-total",
+  "within": "cart",
+  "text": "$7.60"
+ },
+ {
+  "page": "cart",
+  "testid": "checkout-button",
+  "within": "cart",
+  "role": "link",
+  "text": "Checkout"
+ },
+ {
+  "page": "checkout",
+  "testid": "checkout-form",
+  "role": "form"
+ },
+ {
+  "page": "checkout",
+  "testid": "checkout-name",
+  "within": "checkout-form",
+  "role": "textbox",
+  "name": "Full name"
+ },
+ {
+  "page": "checkout",
+  "testid": "checkout-email",
+  "within": "checkout-form",
+  "role": "textbox",
+  "name": "Email"
+ },
+ {
+  "page": "checkout",
+  "testid": "checkout-address",
+  "within": "checkout-form",
+  "role": "textbox",
+  "name": "Street address"
+ },
+ {
+  "page": "checkout",
+  "testid": "checkout-city",
+  "within": "checkout-form",
+  "role": "textbox",
+  "name": "City"
+ },
+ {
+  "page": "checkout",
+  "testid": "checkout-zip",
+  "within": "checkout-form",
+  "role": "textbox",
+  "name": "ZIP code"
+ },
+ {
+  "page": "checkout",
+  "testid": "checkout-error",
+  "within": "checkout-form",
+  "role": "alert"
+ },
+ {
+  "page": "checkout",
+  "testid": "place-order",
+  "within": "checkout-form",
+  "role": "button",
+  "text": "Place order"
+ },
+ {
+  "page": "checkout",
+  "testid": "place-order-spinner",
+  "within": "checkout-form",
+  "role": "progressbar",
+  "name": "Placing order",
+  "hidden": true
+ },
+ {
+  "page": "checkout",
+  "testid": "checkout-total",
+  "text": "$7.60"
+ },
+ {
+  "page": "confirmation",
+  "testid": "order-confirmation"
+ },
+ {
+  "page": "confirmation",
+  "testid": "order-number",
+  "within": "order-confirmation"
+ },
+ {
+  "page": "confirmation",
+  "testid": "confirmation-total",
+  "within": "order-confirmation"
+ },
+ {
+  "page": "confirmation",
+  "testid": "confirmation-zone",
+  "within": "order-confirmation"
+ },
+ {
+  "page": "confirmation",
+  "within": "order-confirmation",
+  "role": "link",
+  "text": "Keep browsing"
+ }
+]

@@ -28,6 +28,8 @@ level, not truly off. Don't rely on `none` meaning "no reasoning".
   `meta-models/muse-spark-open` works (listed by `GET /v1/models`).
 
 ## Decisions
-- Default `LLM_PROVIDER=baseten` (open-weight bonus) for understand, testgen, judge.
+- Default `LLM_PROVIDER=fireworks` (open-weight bonus) for understand, testgen, judge: matches the
+  model map, same provider as the M9 Glimmer judge, and the cleanest effort scaling. Baseten is the
+  open-weight fallback (one line in `.env`).
 - Meta Model API stays required for Voice Transcribe and SAM 3.1, and is the fallback for text stages.
-- M4b sweep: Baseten {low, medium, high} × 3 samples × 3 repeats; Meta sweep only if time allows.
+- M4b sweep: Fireworks {low, medium, high} × 3 samples × 3 repeats; Baseten next if time allows.
