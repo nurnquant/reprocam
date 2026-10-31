@@ -108,6 +108,32 @@ main { padding: 24px clamp(16px, 3vw, 40px) 40px; display: grid; gap: 24px; }
 .filmstrip figcaption { font: 500 10px var(--mono); color: var(--muted); margin-top: 3px; }
 .filmstrip figure.bug figcaption { color: var(--signal); }
 
+.claim {
+  margin-top: 22px; background: var(--night-2); border: 1px solid var(--line-dark); border-radius: 2px;
+  padding: 18px 20px 16px; animation: enter .45s ease-out;
+}
+.claim header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  border-bottom: 1px dashed var(--line-dark); padding-bottom: 10px; }
+.claim h2 { font: 400 26px var(--serif); margin: 0; }
+.claim-badge { font: 500 11px var(--mono); color: var(--muted-light); border: 1px solid var(--line-dark); padding: 1px 7px; border-radius: 2px; }
+.claim-summary { font: 400 28px/1.2 var(--serif); margin: 14px 0 16px; color: var(--paper); }
+.claim-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 640px) { .claim-cols { grid-template-columns: 1fr; } }
+.claim-cols > div { border-top: 2px solid var(--line-dark); padding-top: 8px; }
+.claim-cols h4 { font: 600 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.claim-cols p { margin: 0; font-size: 14px; color: var(--paper-2); }
+.claim-cols .actual { border-top-color: var(--signal); }
+.claim-cols .actual h4, .claim-cols .actual p { color: var(--signal); }
+.claim-cols .actual p { font-weight: 500; }
+.claim-frame {
+  display: flex; align-items: center; gap: 12px; margin-top: 16px; width: 100%; text-align: left; cursor: pointer;
+  background: none; border: 1px solid var(--line-dark); border-radius: 2px; padding: 6px; color: var(--muted-light);
+  font: 12px var(--mono); transition: border-color .15s;
+}
+.claim-frame:hover { border-color: var(--signal); }
+.claim-frame img { height: 44px; border: 1px solid var(--signal); display: block; }
+.claim-frame b { color: var(--signal); font-weight: 600; }
+
 .custody { background: var(--night-2); border: 1px solid var(--line-dark); border-radius: 2px; padding: 18px 20px; display: flex; flex-direction: column; min-height: 0; }
 .custody > header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; border-bottom: 1px dashed var(--line-dark); padding-bottom: 10px; }
 .custody h2 { margin-right: auto !important; }

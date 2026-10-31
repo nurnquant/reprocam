@@ -65,6 +65,7 @@ function reset(label) {
   $("clock").textContent = fmtClock(0);
   $("filmstrip").replaceChildren();
   $("transcript").hidden = true;
+  $("claim").hidden = true;
   $("failure").textContent = "";
   $("code").innerHTML = '<span class="placeholder">The generated test appears here once it\'s written.</span>';
   for (const s of ["stamp-buggy", "stamp-fixed"]) $(s).dataset.state = "idle";
@@ -197,7 +198,7 @@ async function onEvent(e) {
     $("transcript-text").textContent = `“${s.transcript}”`;
     $("transcript").hidden = false;
   }
-  if (e.stage === "understand" && e.status === "ok") markBugFrame(s);
+  if (e.stage === "understand" && e.status === "ok") { markBugFrame(s); renderClaim(s); }
   if (e.stage === "testgen" && e.status === "ok" && attempt) {
     renderCode(attempt.test_code);
     $("failure").textContent = "";
@@ -253,6 +254,21 @@ function markBugFrame(s) {
   for (const f of $("filmstrip").children) f.classList.toggle("bug", Number(f.dataset.n) === ref);
   const k = s.keyframes.find((x) => x.n === ref);
   if (k) $("video").currentTime = k.t;
+}
+
+function renderClaim(s) {
+  const c = s.steps?.bug_claim;
+  if (!c) return;
+  $("claim-summary").textContent = c.summary;
+  $("claim-expected").textContent = c.expected;
+  $("claim-actual").textContent = c.actual;
+  $("claim-element").textContent = c.element;
+  const k = s.keyframes.find((x) => x.n === c.frame_ref);
+  $("claim-frame-label").textContent = `f${c.frame_ref}${k ? ` · ${k.t.toFixed(1)}s` : ""}`;
+  $("claim-thumb").hidden = !k;
+  if (k) $("claim-thumb").src = k.url;
+  $("claim-frame").onclick = () => { if (k) { $("video").currentTime = k.t; $("video").scrollIntoView({ block: "nearest", behavior: "smooth" }); } };
+  $("claim").hidden = false;
 }
 
 // ---------- test ----------

@@ -49,6 +49,21 @@
           <figcaption>narration · Muse Voice Transcribe</figcaption>
         </figure>
         <div class="filmstrip" id="filmstrip" aria-label="Keyframes sent to the model"></div>
+        <section class="claim" id="claim" hidden>
+          <header>
+            <h2>What the agent understood</h2>
+            <span class="claim-badge">bug_claim · Muse Spark Open</span>
+          </header>
+          <p class="claim-summary" id="claim-summary"></p>
+          <div class="claim-cols">
+            <div><h4>Expected</h4><p id="claim-expected"></p></div>
+            <div class="actual"><h4>Actual</h4><p id="claim-actual"></p></div>
+          </div>
+          <button class="claim-frame" id="claim-frame">
+            <img id="claim-thumb" alt="">
+            <span><b id="claim-frame-label"></b> the frame this came from · element “<span id="claim-element"></span>”</span>
+          </button>
+        </section>
       </div>
 
       <aside class="custody">
