@@ -154,16 +154,16 @@ public demo store shows exactly the 3 demo bugs. Every test/run URL passes `?fix
 - [x] `tests/store/`: hand-written test per bug — fails on buggy, passes on fixed (ground truth)
 
 ### M2 — Media + transcription (Sat)
-- [ ] **First:** `scripts/preflight.py` — for each provider: is image input accepted? which
+- [x] **First:** `scripts/preflight.py` — for each provider: is image input accepted? which
       `reasoning_effort` values are accepted **and actually change behaviour** (compare reasoning
       tokens / output length low vs high on one prompt)? Print a table; record it in `docs/preflight.md`.
 - [x] `media.py`: ffmpeg → `audio.wav` (mono 16-bit PCM; sample rate per cookbook) and keyframes
       (scene-change, fallback 1 fps, cap 24, ≤1280 px wide, JPEG)
-- [ ] `transcribe.py`: POST `https://api.meta.ai/v1/asr/transcribe`, `Authorization` header,
+- [x] `transcribe.py`: POST `https://api.meta.ai/v1/asr/transcribe`, `Authorization` header,
       model `muse-voice-transcribe-1.0`; port from cookbook `06_muse_voice/01_voice_api_fundamentals/utils.py`.
       `keywords` = product names + "promo", "checkout", "ZIP".
-- [ ] Nur records 3 narrated sample videos (QuickTime screen + mic) → `samples/`
-- [ ] Acceptance: `python -m backend.media samples/bug1.mov` prints transcript + frame count
+- [ ] Nur records 3 narrated sample videos (QuickTime screen + mic) → `samples/` — bug1 done; bug2, bug3 pending
+- [x] Acceptance: `python -m backend.media samples/bug1.mov` prints transcript + frame count
 
 ### M3 — Understanding: video → steps (Sun)
 - [ ] `dom_snapshot.py`: crawl store, compact map `[{page, testid, role, name, text}]` (≤4k tokens).
