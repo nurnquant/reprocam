@@ -1,6 +1,24 @@
 # Understanding stability
 
-## Deployed: understand v1 on Baseten, 8-image limit (Sun Nov 1)
+## Deployed: understand v1 on the Meta Model API, all frames (Sun Nov 1)
+
+Understanding only (`UNDERSTAND_PROVIDER=meta`, Muse Spark 1.3, effort low, every distinct frame); test writing
+and judging stay on Baseten. Same cached frames, transcript and check as below, 3 runs per bug.
+
+| | bug1 | bug2 | bug3 | total |
+|---|---|---|---|---|
+| v1, Meta API, measure fixed before the runs | 3/3 | 0/3 | 3/3 | 6/9 |
+| v1, Meta API, scored as the pipeline uses "not the app" | 3/3 | 0/3 | 3/3 | 6/9 |
+| v1, Baseten (8 images), the same two measures | 3/3 | 0/3 | 2/3 · 3/3 | 5/9 · 6/9 |
+
+**Decision: understanding moves to the Meta API.** The rule was "at least as good on every bug": it ties
+Baseten on bug1 and bug2 and is better on bug3 on the first measure (no "not the app" answers in 9 runs), equal
+on the second. bug2 still fails 3 of 3, the same way each time: "−" read right (no "Remove" misread, unlike
+Baseten), but the start page loses its product id and "Add to basket" is skipped. Mean latency 7.5 s (Baseten
+7.4 s). Cost not estimated: no Meta per-token price in `.env` yet. Live check after deploying: bug1 via the
+owner link, REPRODUCED and confirmed on the known-good build, attempt 1, 65 s.
+
+## Before: understand v1 on Baseten, 8-image limit (Sun Nov 1)
 
 The live app serves Muse Spark Open from Baseten, which takes at most 8 images per request, so understanding
 gets the first and last keyframes plus the 6 that changed most (`backend/understand.py::limit_frames`). Same

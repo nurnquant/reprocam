@@ -59,6 +59,17 @@ def check(bug: str, steps: dict) -> tuple[bool, str]:
     raise ValueError(bug)
 
 
+def guarded(row: dict) -> bool:
+    """Correct as the pipeline scores it: a "not the app" answer whose steps use >= 2 element-map ids is
+    ignored (backend/agent.py), so only the steps are checked."""
+    if row["correct"] or row.get("shows_app") is not False:
+        return row["correct"]
+    if sum(1 for _, hint, _ in row["steps"] if hint) < 2:
+        return False
+    steps = {"shows_app": True, "steps": [{"action": a, "selector_hint": h, "value": v} for a, h, v in row["steps"]]}
+    return check(row["bug"], steps)[0]
+
+
 def trial(bug: str, version: str) -> dict:
     from backend.understand import understand
     src = ROOT / "runs" / bug
@@ -86,7 +97,8 @@ def main():
     args = ap.parse_args()
     bugs = ["bug1", "bug2", "bug3"]
     n = len(bugs) * len(args.versions) * args.repeats
-    print(f"{n} understanding calls (~$0.02-0.03 each with ~13-20 keyframes): ~${n * 0.022:.2f}")
+    print(f"{n} understanding calls on {os.getenv('UNDERSTAND_PROVIDER') or os.getenv('LLM_PROVIDER')} "
+          f"(~$0.02-0.03 each with ~13-20 keyframes): ~${n * 0.022:.2f}")
     if args.plan:
         return
     if not args.yes and input("Run? [y/N] ").strip().lower() != "y":
@@ -99,13 +111,17 @@ def main():
                 with OUT.open("a") as f:
                     f.write(json.dumps(row) + "\n")
                 print(f"{bug} {version} #{rep}: {'OK ' if row['correct'] else 'no '} {row['why']} · ${row['cost_usd']}")
-    provider = os.getenv("LLM_PROVIDER", "meta").lower()  # rows from other providers are kept, not counted here
+    # understanding's provider; rows from other providers are kept, not counted here
+    provider = (os.getenv("UNDERSTAND_PROVIDER") or os.getenv("LLM_PROVIDER", "meta")).lower()
     rows = [r for r in map(json.loads, OUT.read_text().splitlines())
             if r["version"] in args.versions and r.get("provider") == provider]
-    print(f"\ncorrect / runs ({provider})")
+    print(f"\ncorrect / runs ({provider}) · first: measure fixed before the runs · guard: as the pipeline uses "
+          f"'not the app' (ignored with >= 2 element-map ids)")
     for bug in bugs:
         cells = [f"{v}: {sum(r['correct'] for r in rows if r['bug'] == bug and r['version'] == v)}/"
-                 f"{sum(1 for r in rows if r['bug'] == bug and r['version'] == v)}" for v in args.versions]
+                 f"{sum(1 for r in rows if r['bug'] == bug and r['version'] == v)} "
+                 f"(guard {sum(guarded(r) for r in rows if r['bug'] == bug and r['version'] == v)})"
+                 for v in args.versions]
         print(f"  {bug}  " + "   ".join(cells))
 
 

@@ -96,20 +96,21 @@ On our 3 bugs no effort level was clearly better (7/9, 8/9, 7/9); we use low for
   agree with each other. On bug2 it got there on the retry, but with a weak form: an if/else on the basket count
   with a hard-coded `$18.50`, not a computed quantity × price. It fails on the buggy build and passes on the
   fixed one, yet a price change would break it. One run each, so no claim of reliability yet.
-- **Understanding is right about 1 run in 2 on the deployed app.** On our 3 bugs, the default understand prompt
-  (v1) on Baseten with the 8-image limit got each bug's key steps right in 5 of 9 runs (bug1 3/3, bug2 0/3,
-  bug3 2/3), from the same frames each time; 6 of 9 counting the bug3 run the pipeline's "not the app" guard
-  lets through. bug2 is the weak spot: "Remove" read for "−", a missed "Add to basket" or product id. On Fireworks
-  with every distinct frame it was 6 of 9 (bug1 2/3, bug2 1/3, bug3 3/3). A prompt that keeps the product id
+- **Understanding is right about 2 runs in 3.** On our 3 bugs, the deployed understanding (Muse Spark 1.3 on the
+  Meta Model API, default prompt v1, every distinct frame) got each bug's key steps right in 6 of 9 runs (bug1 3/3,
+  bug2 0/3, bug3 3/3), from the same frames each time. bug2 is the weak spot: the start page loses its product id
+  and "Add to basket" is skipped. On Baseten with its 8-image limit it was 5 of 9 (6 counting the run the "not the
+  app" guard lets through); on Fireworks with every frame, 6 of 9 (bug1 2/3, bug2 1/3, bug3 3/3). A prompt that keeps the product id
   fixed that miss but more often mislabels the recording as "not the app" (`docs/understand_stability.md`).
 - **Expected behaviour is the tester's guess.** Without a known-good build there is nothing to check the claim's
   `expected` against; such runs end "REPRODUCED · not verified".
 - **SAM finds things, not meanings.** "order total" returns no boxes; "price" returns every price. Muse Spark picks
   the claimed one, and the evidence image says so.
-- **Baseten takes at most 8 images per request.** The live app serves Muse Spark Open from Baseten, so
-  understanding sees the first and last keyframes plus the 6 that changed most, not every distinct frame
-  (Fireworks took all of them; the effort test above ran on Fireworks). Costs for Baseten calls use $1.25 / $4.25
-  per 1M tokens from a third-party tracker, not yet confirmed on Baseten.
+- **Two providers in the live app.** Understanding runs on the Meta Model API (`UNDERSTAND_PROVIDER=meta`);
+  test writing, judging and the SAM box pick run on Muse Spark Open on Baseten. Baseten takes at most 8 images
+  per request, which is why understanding (13+ frames) isn't there; if it falls back to Baseten it keeps the
+  first and last keyframes plus the 6 that changed most. The effort test above ran on Fireworks. Baseten costs
+  use $1.25 / $4.25 per 1M tokens from a third-party tracker, not yet confirmed; Meta API calls aren't priced yet.
 - **Local runs use a subprocess, not a sandbox.** Generated tests get no API keys locally either, but only the
   deployed app (`REPRO_SANDBOX=modal`) runs them in an isolated, network-blocked Modal Sandbox.
 

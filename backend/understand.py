@@ -103,6 +103,7 @@ def _image_part(path: Path) -> dict:
 def understand(run_dir: str | Path, effort: str | None = None, provider: str | None = None,
                version: str | None = None) -> dict:
     run_dir = Path(run_dir)
+    provider = provider or os.getenv("UNDERSTAND_PROVIDER") or None  # default: LLM_PROVIDER, like every stage
     manifest = json.loads((run_dir / "frames.json").read_text())
     transcript_file = run_dir / "transcript.json"
     transcript = json.loads(transcript_file.read_text())["transcript"].strip() if transcript_file.exists() else ""
