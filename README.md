@@ -62,7 +62,8 @@ the secret when it starts, and it stays warm for 10 minutes, so a deploy alone c
 2. Stop the old container: `modal container list`, then `modal container stop -y <container id>` for each
    `reprocam` container started before the deploy. The next request starts a fresh one.
 3. Check `/api/config`: `curl -s <url>/api/config` must show the expected `llm_provider` and `max_images`
-   (Baseten: `{"llm_provider":"baseten","max_images":8}`). Then `modal container list` again: one container,
+   (now: `llm_provider` `baseten`, `llm_model` `meta-models/muse-spark-open-1026`, `max_images` 8,
+   `understand_provider` `meta`). Then `modal container list` again: one container,
    started after the deploy.
 4. One live upload via the owner link (`<url>/?owner=<OWNER_TOKEN>`, token in `.env.owner`, never shared): a
    sample recording must end REPRODUCED with the known-good check, the evidence image and the ticket. It counts
@@ -107,10 +108,13 @@ On our 3 bugs no effort level was clearly better (7/9, 8/9, 7/9); we use low for
 - **SAM finds things, not meanings.** "order total" returns no boxes; "price" returns every price. Muse Spark picks
   the claimed one, and the evidence image says so.
 - **Two providers in the live app.** Understanding runs on the Meta Model API (`UNDERSTAND_PROVIDER=meta`);
-  test writing, judging and the SAM box pick run on Muse Spark Open on Baseten. Baseten takes at most 8 images
-  per request, which is why understanding (13+ frames) isn't there; if it falls back to Baseten it keeps the
-  first and last keyframes plus the 6 that changed most. The effort test above ran on Fireworks. Baseten costs
-  use $1.25 / $4.25 per 1M tokens from a third-party tracker, not yet confirmed; Meta API calls aren't priced yet.
+  live test writing, judging and the SAM box pick run on Baseten's hackathon Muse Spark Open endpoint
+  (`meta-models/muse-spark-open-1026`, $100 in hackathon credits, 2M tokens per minute). It takes at most 8 images
+  per request (checked Nov 1: 9 is refused), which is why understanding (13+ frames) isn't there; if it falls back
+  to Baseten it keeps the first and last keyframes plus the 6 that changed most. The effort test and the
+  understanding numbers for Baseten above ran before the switch (Fireworks; Baseten's `meta-models/muse-spark-open`).
+  Cost estimates for Baseten calls use $1.25 / $4.25 per 1M tokens from a third-party tracker, not confirmed;
+  Meta API calls aren't priced yet.
 - **Local runs use a subprocess, not a sandbox.** Generated tests get no API keys locally either, but only the
   deployed app (`REPRO_SANDBOX=modal`) runs them in an isolated, network-blocked Modal Sandbox.
 

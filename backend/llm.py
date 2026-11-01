@@ -25,7 +25,7 @@ PROVIDERS = {
 }
 
 # Most images one request may carry, per provider (None = no limit we have hit). Baseten answers
-# "400 - Too many images: 13 (max 8)" above 8.
+# "400 - Too many images: 13 (max 8)" above 8 (both meta-models/muse-spark-open and -1026, checked Nov 1).
 IMAGE_LIMIT = {"meta": None, "fireworks": None, "baseten": 8}
 
 
