@@ -11,6 +11,7 @@ runs/ or samples/ is modified (each trial works on a scratch copy).
 """
 import argparse
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -98,8 +99,10 @@ def main():
                 with OUT.open("a") as f:
                     f.write(json.dumps(row) + "\n")
                 print(f"{bug} {version} #{rep}: {'OK ' if row['correct'] else 'no '} {row['why']} · ${row['cost_usd']}")
-    rows = [r for r in map(json.loads, OUT.read_text().splitlines()) if r["version"] in args.versions]
-    print("\ncorrect / runs")
+    provider = os.getenv("LLM_PROVIDER", "meta").lower()  # rows from other providers are kept, not counted here
+    rows = [r for r in map(json.loads, OUT.read_text().splitlines())
+            if r["version"] in args.versions and r.get("provider") == provider]
+    print(f"\ncorrect / runs ({provider})")
     for bug in bugs:
         cells = [f"{v}: {sum(r['correct'] for r in rows if r['bug'] == bug and r['version'] == v)}/"
                  f"{sum(1 for r in rows if r['bug'] == bug and r['version'] == v)}" for v in args.versions]

@@ -52,9 +52,21 @@ One public URL: the app at `/`, the practice store at `/store/`.
 ```bash
 uv pip install modal "cbor2<6"          # cbor2 6.x has no wheel for Intel Macs
 modal token new                          # once, opens the browser
-modal secret create reprocam-keys --from-dotenv .env   # keys live in a Modal Secret, never in the image
+modal secret create reprocam-keys --from-dotenv .env.prod --force   # keys live in a Modal Secret, never in the image
 modal deploy deploy/modal_app.py
 ```
+
+**Deploy checklist** (every deploy, and after any secret change). The web container mounts the code and reads
+the secret when it starts, and it stays warm for 10 minutes, so a deploy alone can leave the old version serving.
+1. Redeploy: `modal deploy deploy/modal_app.py`.
+2. Stop the old container: `modal container list`, then `modal container stop -y <container id>` for each
+   `reprocam` container started before the deploy. The next request starts a fresh one.
+3. Check `/api/config`: `curl -s <url>/api/config` must show the expected `llm_provider` and `max_images`
+   (Baseten: `{"llm_provider":"baseten","max_images":8}`). Then `modal container list` again: one container,
+   started after the deploy.
+4. One live upload via the owner link (`<url>/?owner=<OWNER_TOKEN>`, token in `.env.owner`, never shared): a
+   sample recording must end REPRODUCED with the known-good check, the evidence image and the ticket. It counts
+   toward the daily total, so do one.
 Generated tests never run in the web container: each run gets a Modal Sandbox with **no network** (the store
 is served inside the sandbox on localhost), **no secrets**, a 120 s hard timeout, 1 CPU and 2 GiB. Live runs,
 uploads and budget counters live on the `reprocam-runs` Volume. Budget caps and per-IP limits apply; sample
@@ -84,18 +96,20 @@ On our 3 bugs no effort level was clearly better (7/9, 8/9, 7/9); we use low for
   agree with each other. On bug2 it got there on the retry, but with a weak form: an if/else on the basket count
   with a hard-coded `$18.50`, not a computed quantity × price. It fails on the buggy build and passes on the
   fixed one, yet a price change would break it. One run each, so no claim of reliability yet.
-- **Understanding is right about 2 runs in 3.** On our 3 bugs, the default understand prompt (v1) got each
-  bug's key steps right in 6 of 9 runs (bug1 2/3, bug2 1/3, bug3 3/3), from the same frames each time. The main
-  miss: dropping a product id from the start page. A variant that keeps it fixed that, but more often mislabels the
-  recording as "not the app" (`docs/understand_stability.md`).
+- **Understanding is right about 1 run in 2 on the deployed app.** On our 3 bugs, the default understand prompt
+  (v1) on Baseten with the 8-image limit got each bug's key steps right in 5 of 9 runs (bug1 3/3, bug2 0/3,
+  bug3 2/3), from the same frames each time; 6 of 9 counting the bug3 run the pipeline's "not the app" guard
+  lets through. bug2 is the weak spot: "Remove" read for "−", a missed "Add to basket" or product id. On Fireworks
+  with every distinct frame it was 6 of 9 (bug1 2/3, bug2 1/3, bug3 3/3). A prompt that keeps the product id
+  fixed that miss but more often mislabels the recording as "not the app" (`docs/understand_stability.md`).
 - **Expected behaviour is the tester's guess.** Without a known-good build there is nothing to check the claim's
   `expected` against; such runs end "REPRODUCED · not verified".
 - **SAM finds things, not meanings.** "order total" returns no boxes; "price" returns every price. Muse Spark picks
   the claimed one, and the evidence image says so.
 - **Baseten takes at most 8 images per request.** The live app serves Muse Spark Open from Baseten, so
   understanding sees the first and last keyframes plus the 6 that changed most, not every distinct frame
-  (Fireworks took all of them; the measured results above were on Fireworks). On bug1 the 8 frames were enough
-  for the right steps and claim (one check, not a measured rate).
+  (Fireworks took all of them; the effort test above ran on Fireworks). Costs for Baseten calls use $1.25 / $4.25
+  per 1M tokens from a third-party tracker, not yet confirmed on Baseten.
 - **Local runs use a subprocess, not a sandbox.** Generated tests get no API keys locally either, but only the
   deployed app (`REPRO_SANDBOX=modal`) runs them in an isolated, network-blocked Modal Sandbox.
 

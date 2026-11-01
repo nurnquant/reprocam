@@ -1,4 +1,36 @@
-# Understanding stability: understand v1, v2, v3 (Sat Oct 31)
+# Understanding stability
+
+## Deployed: understand v1 on Baseten, 8-image limit (Sun Nov 1)
+
+The live app serves Muse Spark Open from Baseten, which takes at most 8 images per request, so understanding
+gets the first and last keyframes plus the 6 that changed most (`backend/understand.py::limit_frames`). Same
+cached keyframes and transcript per bug as below, v1, 3 runs per bug, effort low, same check.
+
+| | bug1 | bug2 | bug3 | total |
+|---|---|---|---|---|
+| v1, Baseten, measure fixed before the runs | 3/3 | 0/3 | 2/3 | 5/9 |
+| v1, Baseten, scored as the pipeline uses "not the app" | 3/3 | 0/3 | 3/3 | 6/9 |
+
+| | distinct frames | sent | dropped by the cap |
+|---|---|---|---|
+| bug1 | 13 | 8 | 4, 7, 8, 11, 12 |
+| bug2 | 8 | 8 | none |
+| bug3 | 11 | 8 | 2, 9, 17 |
+
+What failed:
+- **bug2, 3 of 3** with all its frames sent, so not the cap: twice "Remove" read where the tester pressed "−"
+  (the bug-bash misread, which didn't occur in the 6 Fireworks v1/v2 runs below), once "−" right but the product
+  missing; all 3 skip "Add to basket", and 2 of 3 drop the product id from the start page.
+- **bug3, 1 of 3: "not the app"** with 8 grounded steps. The pipeline ignores the flag when the steps use ≥ 2
+  element-map ids, so this run would have gone on (second row).
+- bug1 lost 5 of 13 distinct frames to the cap and was still right 3 of 3.
+
+Three runs per cell is too few to say Baseten is worse than Fireworks (5/9 vs 6/9 on the same measure);
+bug2 is the weak spot on both. Cost: 9 calls, $0.16 (at the Baseten rates in `.env`, which come from a
+third-party tracker and still need confirming on Baseten). Rows: `data/understand_stability.jsonl`
+(`provider: baseten`).
+
+## Earlier: understand v1, v2, v3 on Fireworks, all distinct frames (Sat Oct 31)
 
 Same cached keyframes and transcript per bug, understanding run 3× per prompt version
 (Muse Spark Open on Fireworks, effort low). "Correct" = the key actions each demo bug needs
