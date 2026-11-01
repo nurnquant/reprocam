@@ -12,9 +12,9 @@ from playwright.sync_api import expect
 from conftest import APP_URL, STORE_MODE, add_product_to_basket
 
 
-def go(page, path="index.html", train=True, fixed=None):
+def go(page, path="index.html", train=True, fixed=None, fixonly=""):
     fixed = ("1" if STORE_MODE == "fixed" else "0") if fixed is None else fixed
-    page.goto(f"{APP_URL}/{path}?fixed={fixed}&train={'1' if train else '0'}&reset=1")
+    page.goto(f"{APP_URL}/{path}?fixed={fixed}&train={'1' if train else '0'}&fixonly={fixonly}&reset=1")
 
 
 def basket_with_two(page):
@@ -92,3 +92,51 @@ def test_public_store_still_has_the_demo_bugs(page):
         page.get_by_test_id("promo-input").fill("GLOW20")
         page.get_by_test_id("promo-apply").click()
     expect(page.get_by_test_id("order-total")).to_have_text("-$12.40")  # neg_total is still there
+
+
+# --- ?fixonly=<id>: only that bug is off; every other bug stays as on the buggy build (M9 oracle) ----
+
+def neg_total_present(page) -> bool:
+    add_product_to_basket(page, "linen-towels")
+    for _ in range(2):
+        page.get_by_test_id("promo-input").fill("GLOW20")
+        page.get_by_test_id("promo-apply").click()
+    return page.get_by_test_id("order-total").inner_text() == "-$12.40"
+
+
+@pytest.mark.skipif(STORE_MODE == "fixed", reason="?fixonly is about the buggy build")
+@pytest.mark.parametrize("fixed_check", CHECKS, ids=lambda c: c.__name__.removeprefix("check_"))
+def test_fixonly_turns_off_only_that_bug(browser, fixed_check):
+    for check in CHECKS:
+        page = browser.new_page()  # fresh storage per check, like a generated test
+        try:
+            go(page, train=True, fixed="0", fixonly=fixed_check.__name__.removeprefix("check_"))
+            if check is fixed_check:
+                check(page)  # the named bug is gone
+            else:
+                with pytest.raises(AssertionError):
+                    check(page)  # every other training bug is still there
+        finally:
+            page.close()
+    page = browser.new_page()
+    try:
+        go(page, train=True, fixed="0", fixonly=fixed_check.__name__.removeprefix("check_"))
+        expect(page.get_by_test_id("build-mode")).to_have_text(re.compile("buggy"))
+        assert neg_total_present(page)  # demo bugs stay on too
+    finally:
+        page.close()
+
+
+@pytest.mark.skipif(STORE_MODE == "fixed", reason="?fixonly is about the buggy build")
+def test_fixonly_demo_bug_and_clearing(page):
+    go(page, train=False, fixed="0", fixonly="neg_total")
+    assert not neg_total_present(page)
+    go(page, train=False, fixed="0", fixonly="")  # an empty ?fixonly= clears the remembered flag
+    assert neg_total_present(page)
+
+
+@pytest.mark.skipif(STORE_MODE == "fixed", reason="?fixonly is about the buggy build")
+def test_fixonly_sticks_across_pages_without_the_param(page):
+    go(page, train=True, fixed="0", fixonly="detail_price")
+    page.goto(f"{APP_URL}/index.html")  # no query: the remembered flags still apply
+    check_detail_price(page)

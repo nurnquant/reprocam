@@ -71,6 +71,30 @@ def test_mutations_break_the_test_the_intended_way():
     assert mutate("x = 1\n", "broken_selector") is None
 
 
+def test_assertion_mutations_make_the_claim_assertion_wrong():
+    from backend.testgen import assemble, lint
+    from gen_judge_data import ASSERT_MUTATIONS, mutate
+    last = 'expect(page.get_by_test_id("cart-count"), "badge").to_have_text("1")'
+    assert 'expect(page.get_by_test_id("cart-count"), "badge").to_have_text("2")' in mutate(BASE, "wrong_value")
+    money = BASE.replace(last, 'expect(page.get_by_test_id("cart-subtotal"), "should be $82.80").to_have_text("$82.80")')
+    assert mutate(money, "wrong_value").count("$82.81") == 2  # the message follows, so it is no giveaway
+    count = BASE.replace(last, 'expect(page.get_by_test_id("cart-line-pebble-light"), "gone").to_have_count(0)')
+    assert ".to_have_count(1)" in mutate(count, "wrong_value")
+    chained = BASE.replace('page.get_by_test_id("cart-count")', 'page.get_by_test_id("cart-line-a").get_by_test_id("line-total")')
+    assert 'expect(page.get_by_test_id("build-mode"), "badge").to_have_text("1")' in mutate(chained, "wrong_element")
+    never = mutate(BASE, "never_present").splitlines()
+    i = next(n for n, ln in enumerate(never) if "get_by_text(" in ln)
+    assert never[i + 1].strip() == last  # waits for the missing text first, before the claim assertion
+    for kind in ASSERT_MUTATIONS:
+        assert lint(assemble(mutate(BASE, kind))) is None
+        assert mutate(BASE.replace(last, "pass"), kind) is None  # nothing to break without an expect()
+
+
+def test_oracle_fixes_only_the_claimed_bug():
+    from gen_judge_data import oracle_query
+    assert oracle_query("detail_price") == "train=1&fixonly=detail_price"
+
+
 def test_missing_import_mutation_is_an_error_when_run(tmp_path):
     from backend.runner import run_test
     from backend.testgen import assemble
@@ -80,7 +104,7 @@ def test_missing_import_mutation_is_an_error_when_run(tmp_path):
     assert r["outcome"] == "error" and r["exc_type"].endswith("NameError")
 
 
-def test_split_uses_only_the_failed_assertion_slice_and_keeps_groups_together(tmp_path, monkeypatch):
+def test_split_uses_only_the_failed_assertion_slice_balances_eval_and_keeps_groups_together(tmp_path, monkeypatch):
     import gen_judge_data as g
     rows = []
     for i in range(70):  # each group: a correct test (in the slice) + a broken copy (error: not in the slice)
@@ -88,6 +112,11 @@ def test_split_uses_only_the_failed_assertion_slice_and_keeps_groups_together(tm
                      "oracle": {"buggy": "assert_fail", "fixed": "pass"}})
         rows.append({"bug": "b", "variant": "mut_x", "rep": i, "group": f"g{i}", "label": "TEST_ERROR",
                      "oracle": {"buggy": "error", "fixed": "error"}})
+        if i < 10:  # some groups hold both slice labels
+            rows.append({"bug": "b", "variant": "mut_wrong_value", "rep": i, "group": f"g{i}",
+                         "label": "NOT_REPRODUCED", "oracle": {"buggy": "assert_fail", "fixed": "assert_fail"}})
+    rows += [{"bug": "b", "variant": "wrong_assertion", "rep": i, "group": f"w{i}", "label": "NOT_REPRODUCED",
+              "oracle": {"buggy": "assert_fail", "fixed": "assert_fail"}} for i in range(25)]
     rows += [{"bug": "b", "variant": "trivial", "rep": i, "group": f"t{i}", "label": "NOT_REPRODUCED",
               "oracle": {"buggy": "pass", "fixed": "pass"}} for i in range(30)]
     for name in ("ROWS", "EVAL", "TRAIN", "ALL", "DROPPED"):
@@ -98,9 +127,10 @@ def test_split_uses_only_the_failed_assertion_slice_and_keeps_groups_together(tm
     ev = [json.loads(line) for line in g.EVAL.read_text().splitlines()]
     tr = [json.loads(line) for line in g.TRAIN.read_text().splitlines()]
     assert all(r["oracle"]["buggy"] == "assert_fail" for r in ev + tr)       # the slice only
-    assert len(ev) == 40 and len({r["group"] for r in ev}) == 40 and len(tr) == 30
-    assert not {r["group"] for r in ev} & {r["group"] for r in tr}
+    assert report["eval"] == {"REPRODUCED": 20, "NOT_REPRODUCED": 20}        # balanced
+    assert len({r["group"] for r in ev}) == 40
+    assert not {r["group"] for r in ev} & {r["group"] for r in tr}           # no group on both sides
+    assert len(tr) == 70 + 10 + 25 - sum(1 for r in rows if r["group"] in {e["group"] for e in ev} and g.in_slice(r))
     assert len(g.ALL.read_text().splitlines()) == len(rows)                     # full set kept for reference
-    assert report["slice"]["REPRODUCED"] == 70 and "TEST_ERROR" not in report["slice"]
     g.split(min_train=10)
     assert [json.loads(line) for line in g.EVAL.read_text().splitlines()] == ev  # fixed seed: same eval set

@@ -8,10 +8,14 @@ For each training bug, Muse Spark Open writes tests in several variants (correct
 missing step, unrelated assertion, trivially passing; weighted by PLAN). The model often ignores
 "deliberately break it" instructions, so broken tests are also made by code: every correct test gets one
 mutated copy (broken selector on an action, missing import, or wrong start page, in rotation) at no
-extra model cost. Each test runs on the buggy build (?train=1&fixed=0) and the fixed build (?fixed=1);
-LABELS turns the two outcomes into the verdict. Demo bugs 1-3 never appear here: they stay held out.
+extra model cost. Each test runs on the buggy build (?train=1, all 8 bugs on) and on the same build with
+only the claimed bug fixed (?train=1&fixonly=<bug>), so a test that trips over a different bug fails on
+both and is not credited as a reproduction. LABELS turns the two outcomes into the verdict. Demo bugs 1-3
+are never claimed here: they stay held out.
 
-    python scripts/gen_judge_data.py --split    # train/eval from the failed-assertion slice; 40 held out (seed 1031)
+    python scripts/gen_judge_data.py --relabel  # re-run every row's oracle with ?fixonly (local, no model calls)
+    python scripts/gen_judge_data.py --mutate   # wrong value / wrong element / never-present text copies (local)
+    python scripts/gen_judge_data.py --split    # train/eval from the failed-assertion slice; 20/20 eval (seed 1031)
 
 
 Rows: data/judge_sft_rows.jsonl (chat format in "messages" + metadata); cells the table drops go to
@@ -39,6 +43,11 @@ ROWS = ROOT / "data" / "judge_sft_rows.jsonl"
 DROPPED = ROOT / "data" / "judge_sft_dropped.jsonl"
 WORK = ROOT / "runs" / "judge_data"
 QUERY = "train=1"  # turns the training-only bugs on (buggy build only)
+
+
+def oracle_query(bug: str) -> str:
+    """The oracle's "fixed" run: the buggy build with only the claimed bug turned off."""
+    return f"{QUERY}&fixonly={bug}"
 
 # BUILD_PLAN M9: all 9 buggy x fixed outcome pairs. None = ambiguous, the row is dropped.
 LABELS = {
@@ -118,7 +127,10 @@ VARIANTS = {
 
 # Model calls per bug and variant for the full set (~445 calls -> ~600 rows with mutations).
 PLAN = {"correct": 31, "wrong_assertion": 18, "missing_step": 13, "unrelated_assert": 13, "trivial_pass": 14}
-MUTATIONS = ["broken_selector", "missing_import", "wrong_page"]
+MUTATIONS = ["broken_selector", "missing_import", "wrong_page"]  # one per correct test, in rotation
+# Every correct test also gets one copy of each of these (--mutate): its claim assertion is made wrong
+ASSERT_MUTATIONS = ["wrong_value", "wrong_element", "never_present"]
+NEVER_PRESENT = ["Gift wrap: added", "Free delivery unlocked", "Loyalty points earned: 40", "Saved to your wishlist"]
 EVAL = ROOT / "data" / "judge_sft_eval.jsonl"
 TRAIN = ROOT / "data" / "judge_sft_train.jsonl"
 ALL = ROOT / "data" / "judge_data_all.jsonl"
@@ -143,6 +155,49 @@ def mutate(code: str, kind: str) -> str | None:
             return None
         other = "confirmation.html" if not m.group(1).startswith("confirmation") else "index.html"
         return head + body[:m.start(1)] + other + body[m.end(1):]
+    if kind in ASSERT_MUTATIONS:
+        broken = _break_last_expect(body, kind)
+        return head + broken if broken else None
+    raise ValueError(kind)
+
+
+def _break_last_expect(body: str, kind: str) -> str | None:
+    """The test with its last expect() (the claim assertion) made wrong, or None if it can't be."""
+    import re
+    lines = body.split("\n")
+    idx = [i for i, ln in enumerate(lines) if ln.lstrip().startswith("expect(")]
+    if not idx:
+        return None
+    i = idx[-1]
+    line = lines[i]
+    if kind == "wrong_value":  # expects a different value; the message is changed to match, not left as a hint
+        m = re.search(r'\.(?:to_have_text|to_contain_text|to_have_value)\("([^"]*)"\)', line)
+        if m:
+            old = m.group(1)
+            digits = [j for j, ch in enumerate(old) if ch.isdigit()]
+            if digits:
+                j = digits[-1]
+                new = old[:j] + str((int(old[j]) + 1) % 10) + old[j + 1:]
+            else:
+                new = old + " (updated)"
+            lines[i] = line.replace(old, new)
+            return "\n".join(lines)
+        m = re.search(r'\.to_have_count\((\d+)\)', line)
+        if m:
+            lines[i] = line[:m.start(1)] + str(int(m.group(1)) + 1) + line[m.end(1):]
+            return "\n".join(lines)
+        return None
+    if kind == "wrong_element":  # same assertion on an element that is on every page and never changes
+        m = re.match(r'(\s*expect\()page(?:\.get_by_test_id\("[\w-]+"\))+', line)
+        if not m or 'get_by_test_id("build-mode")' in line:
+            return None
+        lines[i] = m.group(1) + 'page.get_by_test_id("build-mode")' + line[m.end():]
+        return "\n".join(lines)
+    if kind == "never_present":  # first waits for text the store never shows
+        text = NEVER_PRESENT[int(hashlib.sha256(body.encode()).hexdigest(), 16) % len(NEVER_PRESENT)]
+        indent = line[: len(line) - len(line.lstrip())]
+        lines.insert(i, f'{indent}expect(page.get_by_text("{text}"), "{text.split(":")[0].lower()} should show").to_be_visible()')
+        return "\n".join(lines)
     raise ValueError(kind)
 
 
@@ -188,12 +243,12 @@ def run_and_label(bug: str, variant: str, rep: int, code: str, app_url: str, cos
         buggy = good = {"outcome": "error", "phase": "lint", "exc_type": "Lint", "message": problem}
     else:
         buggy = run_test(code, work / "buggy", app_url, fixed=False, query=QUERY)
-        good = run_test(code, work / "fixed", app_url, fixed=True, query=QUERY)
+        good = run_test(code, work / "fixed", app_url, fixed=False, query=oracle_query(bug))
     verdict = label(buggy["outcome"], good["outcome"])
     user = judge_input(steps["bug_claim"], code, buggy)
     return {
         "bug": bug, "variant": variant, "rep": rep, "label": verdict, "group": group,
-        "oracle": {"buggy": buggy["outcome"], "fixed": good["outcome"]},
+        "oracle": {"buggy": buggy["outcome"], "fixed": good["outcome"], "fixed_build": "fixonly"},
         "test_hash": hashlib.sha256(code.encode()).hexdigest()[:12], "cost_usd": cost,
         "testgen_prompt": meta.get("prompt_version"), "effort": meta.get("effort"),
         "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": user},
@@ -214,6 +269,108 @@ def make_rows(bug: str, variant: str, rep: int, app_url: str) -> list[dict]:
     return rows
 
 
+def saved_code(row: dict) -> str | None:
+    """The test a row was made from (its run folder), checked against the row's hash. None for tests that
+    never ran (failed lint): those stay TEST_ERROR on both builds."""
+    f = WORK / f"{row['bug']}-{row['variant']}-{row['rep']}" / "buggy" / "test_repro.py"
+    if not f.exists():
+        return None
+    code = f.read_text()
+    if hashlib.sha256(code.encode()).hexdigest()[:12] != row["test_hash"]:
+        raise RuntimeError(f"{f} does not match the row's test_hash")
+    return code
+
+
+def _load_all() -> list[dict]:
+    return [json.loads(line) for f in (ROWS, DROPPED) if f.exists() for line in f.read_text().splitlines()]
+
+
+def _write_all(rows: list[dict]) -> None:
+    ROWS.write_text("".join(json.dumps(r) + "\n" for r in rows if r["label"]))
+    DROPPED.write_text("".join(json.dumps(r) + "\n" for r in rows if not r["label"]))
+
+
+def _set_label(row: dict, fixed_outcome: str) -> None:
+    row["oracle"] = {**row["oracle"], "fixed": fixed_outcome, "fixed_build": "fixonly"}
+    row["label"] = label(row["oracle"]["buggy"], fixed_outcome)
+    if row["messages"]:  # the judge's input is the buggy run, unchanged; only the answer moves
+        row["messages"] = row["messages"][:2] + [{"role": "assistant", "content": json.dumps({"verdict": row["label"]})}]
+
+
+def _parallel(fn, items, workers):
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    app_url = os.getenv("APP_URL", "http://localhost:5173").rstrip("/")
+    out = []
+    with store_running(app_url), ThreadPoolExecutor(workers) as pool:
+        futures = [pool.submit(fn, item, app_url) for item in items]
+        for n, fut in enumerate(as_completed(futures), 1):
+            try:
+                out.append(fut.result())
+            except Exception as e:  # noqa: BLE001  (that row is left as it was; re-running picks it up)
+                print(f"  failed: {e.__class__.__name__}: {str(e)[:120]}", flush=True)
+            if n % 50 == 0 or n == len(items):
+                print(f"  {n}/{len(items)}", flush=True)
+    return out
+
+
+def relabel(workers: int = 6) -> None:
+    """Re-run every row's oracle on ?train=1&fixonly=<claimed bug> (local runs, no model calls). Rows made
+    before this keep their old label as label_fixed_all, so the change can be counted."""
+    from collections import Counter
+    rows = _load_all()
+    todo = [r for r in rows if r["oracle"].get("fixed_build") != "fixonly"]
+    print(f"relabel: {len(todo)} of {len(rows)} rows need a fixonly oracle run")
+
+    def one(row, app_url):
+        code = saved_code(row)
+        old = row["label"]
+        if code is None:
+            fixed_outcome = row["oracle"]["fixed"]  # never ran (lint): error on both builds, as before
+        else:
+            work = WORK / f"{row['bug']}-{row['variant']}-{row['rep']}"
+            fixed_outcome = run_test(code, work / "fixonly", app_url, fixed=False,
+                                     query=oracle_query(row["bug"]))["outcome"]
+        row.setdefault("label_fixed_all", old)
+        row.setdefault("oracle_fixed_all", row["oracle"]["fixed"])
+        _set_label(row, fixed_outcome)
+        return row
+
+    _parallel(one, todo, workers)
+    _write_all(rows)
+    changed = Counter((r["variant"], r["label_fixed_all"], r["label"]) for r in todo if r["label_fixed_all"] != r["label"])
+    print(f"relabel: {sum(changed.values())} of {len(todo)} labels changed")
+    for (variant, old, new), n in sorted(changed.items()):
+        print(f"  {variant:<20} {old} -> {new or 'DROPPED'}: {n}")
+
+
+def add_mutations(workers: int = 6) -> None:
+    """One copy of every correct test per ASSERT_MUTATIONS kind, in the correct test's group (local runs)."""
+    from collections import Counter
+    rows = _load_all()
+    have = {(r["bug"], r["variant"], r["rep"]) for r in rows}
+    todo = []
+    for r in rows:
+        if r["variant"] != "correct":
+            continue
+        code = saved_code(r)
+        for kind in ASSERT_MUTATIONS:
+            broken = mutate(code, kind) if code else None
+            if broken and (r["bug"], f"mut_{kind}", r["rep"]) not in have:
+                todo.append((r, kind, broken))
+    print(f"mutate: {len(todo)} new rows from {sum(r['variant'] == 'correct' for r in rows)} correct tests")
+
+    def one(item, app_url):
+        r, kind, broken = item
+        return run_and_label(r["bug"], f"mut_{kind}", r["rep"], broken, app_url, 0.0,
+                             {"prompt_version": r.get("testgen_prompt"), "effort": r.get("effort")}, _group(r))
+
+    new = _parallel(one, todo, workers)
+    _write_all(rows + new)
+    c = Counter((r["variant"], r["oracle"]["buggy"], r["label"]) for r in new)
+    for (variant, buggy, lab), n in sorted(c.items()):
+        print(f"  {variant:<20} buggy={buggy:<11} {lab or 'DROPPED'}: {n}")
+
+
 def in_slice(row: dict) -> bool:
     """What the model judge sees in production: the rule layer handles passes and crashes first, so the
     model only judges tests that failed an assertion on the buggy build (labels: REPRODUCED or NOT_REPRODUCED)."""
@@ -224,10 +381,11 @@ def _group(r: dict) -> str:
     return r.get("group") or f"{r['bug']}-{r['variant']}-{r['rep']}"
 
 
-def split(seed: int = 1031, n_eval: int = 40, min_train: int = 200) -> dict:
-    """Full set -> judge_data_all.jsonl (reference). Train/eval come from the failed-assertion slice only:
-    n_eval random rows held out BEFORE any training, one per group; their group siblings are left out of
-    training too, so no near-duplicate of an eval row is trained on."""
+def split(seed: int = 1031, per_label: int = 20, min_train: int = 200) -> dict:
+    """Full set -> judge_data_all.jsonl (reference). Train/eval come from the failed-assertion slice only.
+    Eval is balanced: per_label groups held out for each slice label (REPRODUCED, NOT_REPRODUCED), BEFORE any
+    training, one row of that label per group; the held groups' other rows are left out of training too,
+    so no near-duplicate of an eval row is trained on."""
     import random
     from collections import Counter
     rows = [json.loads(line) for line in ROWS.read_text().splitlines()]
@@ -237,8 +395,13 @@ def split(seed: int = 1031, n_eval: int = 40, min_train: int = 200) -> dict:
     by_group = {}
     for r in sliced:
         by_group.setdefault(_group(r), []).append(r)
-    held = set(random.Random(seed).sample(sorted(by_group), n_eval))
-    eval_rows = [random.Random(f"{seed}-{g}").choice(by_group[g]) for g in sorted(held)]
+    rnd, held, eval_rows = random.Random(seed), set(), []
+    # the rarer label picks its groups first, so groups holding both labels can't all go to the other
+    for lab in sorted({"REPRODUCED", "NOT_REPRODUCED"}, key=lambda x: sum(r["label"] == x for r in sliced)):
+        groups = sorted(g for g, rs in by_group.items() if g not in held and any(r["label"] == lab for r in rs))
+        for g in rnd.sample(groups, min(per_label, len(groups))):
+            held.add(g)
+            eval_rows.append(random.Random(f"{seed}-{g}").choice([r for r in by_group[g] if r["label"] == lab]))
     train_rows = [r for g, rs in by_group.items() if g not in held for r in rs]
     EVAL.write_text("".join(json.dumps(r) + "\n" for r in eval_rows))
     TRAIN.write_text("".join(json.dumps(r) + "\n" for r in train_rows))
@@ -246,12 +409,16 @@ def split(seed: int = 1031, n_eval: int = 40, min_train: int = 200) -> dict:
     report = {"all": Counter(r["label"] for r in rows) + Counter({"DROPPED": len(dropped)}),
               "slice": Counter(r["label"] for r in sliced), "train": Counter(r["label"] for r in train_rows),
               "eval": Counter(r["label"] for r in eval_rows),
+              "train_variants": Counter((r["variant"], r["label"]) for r in train_rows),
+              "eval_variants": Counter((r["variant"], r["label"]) for r in eval_rows),
               "left_out": sum(len(by_group[g]) for g in held) - len(eval_rows)}
     for name in ("all", "slice", "train", "eval"):
         c = report[name]
         print(f"  {name:<6} {sum(c.values()):>4} rows · " + " · ".join(f"{k} {v}" for k, v in sorted(c.items())))
     print(f"  {report['left_out']} sibling row(s) of eval rows used in neither · files: {ALL.relative_to(ROOT)}, "
           f"{TRAIN.relative_to(ROOT)}, {EVAL.relative_to(ROOT)}")
+    for name in ("train_variants", "eval_variants"):
+        print(f"  {name}: " + " · ".join(f"{v}/{lab[:3]} {n}" for (v, lab), n in sorted(report[name].items())))
     if len(train_rows) < min_train:
         print(f"STOP: only {len(train_rows)} training rows in the failed-assertion slice (< {min_train}). "
               f"Generate more variants that reach an assertion before training.")
@@ -286,9 +453,15 @@ def main():
     ap.add_argument("--plan", action="store_true")
     ap.add_argument("--yes", action="store_true")
     ap.add_argument("--split", action="store_true", help="write the held-out eval and train files, then exit")
+    ap.add_argument("--relabel", action="store_true", help="re-run every row's oracle with ?fixonly, then exit")
+    ap.add_argument("--mutate", action="store_true", help="add the assertion mutations of correct tests, then exit")
     args = ap.parse_args()
     if args.split:
         return split()
+    if args.relabel:
+        return relabel(args.workers)
+    if args.mutate:
+        return add_mutations(args.workers)
 
     have, spent = existing()
     todo = [c for c in combos() if c not in have]

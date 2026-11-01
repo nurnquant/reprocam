@@ -10,6 +10,8 @@
 // Flags (remembered in localStorage):
 //   ?fixed=1  -> fixed build, every bug off        ?fixed=0  -> back to the buggy build
 //   ?train=1  -> training bugs on as well          ?train=0  -> demo bugs only
+//   ?fixonly=<id> -> only that bug off, every other bug as on the buggy build   ?fixonly= -> clear
+//               (the M9 oracle: a test that trips over a different bug still fails here)
 //   ?reset=1  -> clear basket, promos and last order (see below)
 const BUGS = {
   neg_total: { on: true, set: "demo" }, // promo GLOW20 can be applied repeatedly; total goes below $0
@@ -28,12 +30,28 @@ if (params.get("fixed") === "1") localStorage.setItem("ll_fixed", "1");
 if (params.get("fixed") === "0") localStorage.removeItem("ll_fixed");
 if (params.get("train") === "1") localStorage.setItem("ll_train", "1");
 if (params.get("train") === "0") localStorage.removeItem("ll_train");
+if (params.has("fixonly")) {
+  const id = params.get("fixonly");
+  if (id && !BUGS[id]) throw new Error(`unknown bug id in ?fixonly: ${id}`);
+  if (id) localStorage.setItem("ll_fixonly", id);
+  else localStorage.removeItem("ll_fixonly");
+}
 const FIXED = localStorage.getItem("ll_fixed") === "1";
 const TRAIN = localStorage.getItem("ll_train") === "1";
+const FIXONLY = localStorage.getItem("ll_fixonly");
+
+// ?reset=1 starts a clean session (for recordings and tests): empty basket, no promos, no
+// last order. The build flags are kept. The parameter is then removed from the address bar.
+if (params.get("reset") === "1") {
+  for (const key of ["ll_cart", "ll_last_order"]) localStorage.removeItem(key);
+  params.delete("reset");
+  const query = params.toString();
+  history.replaceState(null, "", location.pathname + (query ? `?${query}` : "") + location.hash);
+}
 
 function bug(id) {
   const entry = BUGS[id];
   if (!entry) throw new Error(`unknown bug id: ${id}`);
-  if (FIXED || !entry.on) return false;
+  if (FIXED || !entry.on || id === FIXONLY) return false;
   return entry.set === "demo" || TRAIN;
 }

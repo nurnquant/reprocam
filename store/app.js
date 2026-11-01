@@ -152,7 +152,7 @@ function renderCartCount() {
 
 function renderBuildBadge() {
   const node = $('[data-testid="build-mode"]');
-  if (node) node.textContent = FIXED ? "build: fixed" : "build: buggy";
+  if (node) node.textContent = FIXED ? "build: fixed" : FIXONLY ? `build: buggy · ${FIXONLY} fixed` : "build: buggy";
 }
 
 function renderList() {
