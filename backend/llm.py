@@ -9,6 +9,7 @@ effort, tokens, latency and cost estimate to data/llm_calls.jsonl.
 """
 import json
 import os
+import random
 import time
 from pathlib import Path
 
@@ -53,12 +54,13 @@ def cost_estimate(provider: str, prompt_tokens: int, completion_tokens: int) -> 
 
 
 def chat(messages: list[dict], *, stage: str, provider: str | None = None, effort: str | None = None,
-         response_format: dict | None = None, max_tokens: int | None = None, retries: int = 3,
+         response_format: dict | None = None, max_tokens: int | None = None, retries: int | None = None,
          log_extra: dict | None = None) -> tuple[str, dict]:
     """Returns (content, meta). meta = model, provider, effort, tokens, latency_s, cost_usd."""
     provider = (provider or os.getenv("LLM_PROVIDER", "meta")).lower()
     effort = effort or effort_for(stage)
     max_tokens = max_tokens or MAX_OUTPUT_TOKENS
+    retries = retries or int(os.getenv("LLM_RETRIES", "3"))  # batch jobs raise it to ride out 503 overloads
     client, model = get_client(provider)
     kwargs = {"model": model, "messages": messages, "reasoning_effort": effort, "max_tokens": max_tokens}
     if response_format:
@@ -66,16 +68,20 @@ def chat(messages: list[dict], *, stage: str, provider: str | None = None, effor
 
     for attempt in range(retries):
         started = time.time()
+        wait = min(60.0, 2.0 ** (attempt + 1)) + random.uniform(0, 1)  # exponential backoff with jitter
         try:
             r = client.chat.completions.create(**kwargs)
             break
         except APIStatusError as e:
             if e.status_code not in RETRY_STATUS or attempt == retries - 1:
                 raise
+            after = e.response.headers.get("retry-after") if e.response is not None else None
+            if after and after.replace(".", "", 1).isdigit():
+                wait = max(wait, min(60.0, float(after)))
         except APIConnectionError:
             if attempt == retries - 1:
                 raise
-        time.sleep(2 ** (attempt + 1))
+        time.sleep(wait)
 
     u = r.usage
     details = getattr(u, "completion_tokens_details", None)

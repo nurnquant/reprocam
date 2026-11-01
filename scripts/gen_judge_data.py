@@ -15,7 +15,7 @@ are never claimed here: they stay held out.
 
     python scripts/gen_judge_data.py --relabel  # re-run every row's oracle with ?fixonly (local, no model calls)
     python scripts/gen_judge_data.py --mutate   # wrong value / wrong element / never-present text copies (local)
-    python scripts/gen_judge_data.py --split    # train/eval from the failed-assertion slice; 20/20 eval (seed 1031)
+    python scripts/gen_judge_data.py --split    # slice-only train/eval: eval 20 REPRODUCED / 10 natural NR / 10 mutated NR (seed 1031)
 
 
 Rows: data/judge_sft_rows.jsonl (chat format in "messages" + metadata); cells the table drops go to
@@ -126,11 +126,34 @@ VARIANTS = {
 
 
 # Model calls per bug and variant for the full set (~445 calls -> ~600 rows with mutations).
-PLAN = {"correct": 31, "wrong_assertion": 18, "missing_step": 13, "unrelated_assert": 13, "trivial_pass": 14}
+# wrong_assertion was raised from 18 to 48 for more model-written (natural) NOT_REPRODUCED rows in the slice.
+PLAN = {"correct": 31, "wrong_assertion": 48, "missing_step": 13, "unrelated_assert": 13, "trivial_pass": 14}
 MUTATIONS = ["broken_selector", "missing_import", "wrong_page"]  # one per correct test, in rotation
 # Every correct test also gets one copy of each of these (--mutate): its claim assertion is made wrong
 ASSERT_MUTATIONS = ["wrong_value", "wrong_element", "never_present"]
-NEVER_PRESENT = ["Gift wrap: added", "Free delivery unlocked", "Loyalty points earned: 40", "Saved to your wishlist"]
+# Store facts the mutations draw from (store/app.js, store/*.html)
+PRICES = [8900, 14500, 1850, 6400, 2760, 3200]  # cents, the six products
+PAGE_ELEMENTS = {  # page-level elements with text, one of each per page (line-* repeat, so they're left out)
+    "cart": ["cart-subtotal", "order-total", "cart-count"],
+    "product": ["product-price", "product-title", "cart-count"],
+    "checkout": ["checkout-total", "cart-count"],
+    "confirmation": ["confirmation-total", "order-number", "cart-count"],
+}
+PAGE_PREFIXES = {"confirmation": ("confirmation-", "order-number", "order-confirmation"),
+                 "checkout": ("checkout-", "place-order"), "product": ("product-", "add-to-cart", "added-message", "view-cart"),
+                 "cart": ("cart", "line-", "order-total", "discount-total", "promo-", "qty-")}
+NEVER_PRESENT = [  # none of these appear anywhere in the store (tests/unit/test_judge_labels.py checks)
+    "Gift wrap: added", "Free delivery unlocked", "Loyalty points earned: 40", "Saved to your wishlist",
+    "Estimated delivery: 2-3 days", "Only 2 left in stock", "Basket saved for later", "Thanks for shopping with us",
+    "Parcel handed to courier", "Promo code expired", "Payment authorised", "Express shipping selected",
+    "Subscribe and save 5%", "Back in stock soon", "VAT included", "Pay in 3 instalments", "Order updated",
+    "Price match applied", "Member price", "Click and collect available", "Receipt emailed", "Item reserved",
+    "Delivery address confirmed", "Basket total updated",
+]
+MISSING_TESTIDS = ["delivery-estimate", "gift-wrap-note", "loyalty-points", "stock-note", "receipt-link",
+                   "order-status", "basket-saved", "price-match", "payment-status", "member-price"]
+MESSAGES = ["{} should be shown", "page should mention {}", "{} message should appear", "expect {} to be visible",
+            "{} should be on the page", "shows {}"]
 EVAL = ROOT / "data" / "judge_sft_eval.jsonl"
 TRAIN = ROOT / "data" / "judge_sft_train.jsonl"
 ALL = ROOT / "data" / "judge_data_all.jsonl"
@@ -162,7 +185,9 @@ def mutate(code: str, kind: str) -> str | None:
 
 
 def _break_last_expect(body: str, kind: str) -> str | None:
-    """The test with its last expect() (the claim assertion) made wrong, or None if it can't be."""
+    """The test with its last expect() (the claim assertion) made wrong, or None if it can't be.
+    Each kind draws from a varied pool (seeded by the test) so no fixed string marks a mutated test."""
+    import random
     import re
     lines = body.split("\n")
     idx = [i for i, ln in enumerate(lines) if ln.lstrip().startswith("expect(")]
@@ -170,35 +195,82 @@ def _break_last_expect(body: str, kind: str) -> str | None:
         return None
     i = idx[-1]
     line = lines[i]
-    if kind == "wrong_value":  # expects a different value; the message is changed to match, not left as a hint
-        m = re.search(r'\.(?:to_have_text|to_contain_text|to_have_value)\("([^"]*)"\)', line)
-        if m:
-            old = m.group(1)
-            digits = [j for j, ch in enumerate(old) if ch.isdigit()]
-            if digits:
-                j = digits[-1]
-                new = old[:j] + str((int(old[j]) + 1) % 10) + old[j + 1:]
-            else:
-                new = old + " (updated)"
-            lines[i] = line.replace(old, new)
-            return "\n".join(lines)
-        m = re.search(r'\.to_have_count\((\d+)\)', line)
-        if m:
-            lines[i] = line[:m.start(1)] + str(int(m.group(1)) + 1) + line[m.end(1):]
-            return "\n".join(lines)
-        return None
-    if kind == "wrong_element":  # same assertion on an element that is on every page and never changes
-        m = re.match(r'(\s*expect\()page(?:\.get_by_test_id\("[\w-]+"\))+', line)
-        if not m or 'get_by_test_id("build-mode")' in line:
+    rnd = random.Random(f"{kind}-{hashlib.sha256(body.encode()).hexdigest()}")
+    if kind == "wrong_value":  # the message changes with the value, so it is no hint either
+        new = _wrong_value(line, rnd)
+        if new is None:
             return None
-        lines[i] = m.group(1) + 'page.get_by_test_id("build-mode")' + line[m.end():]
+        lines[i] = new
         return "\n".join(lines)
-    if kind == "never_present":  # first waits for text the store never shows
-        text = NEVER_PRESENT[int(hashlib.sha256(body.encode()).hexdigest(), 16) % len(NEVER_PRESENT)]
+    if kind == "wrong_element":  # same assertion on another real element of the same page
+        m = re.match(r'(\s*expect\()page((?:\.get_by_test_id\("[\w-]+"\))+)', line)
+        if not m:
+            return None
+        ids = re.findall(r'"([\w-]+)"', m.group(2))
+        others = [t for t in PAGE_ELEMENTS[_page_of(ids[-1], body)] if t not in ids and not
+                  (ids[-1] in ("nav-cart", "cart-count") and t == "cart-count")]
+        lines[i] = m.group(1) + f'page.get_by_test_id("{rnd.choice(others)}")' + line[m.end():]
+        return "\n".join(lines)
+    if kind == "never_present":  # waits for text or an element the store never shows
+        text = rnd.choice(NEVER_PRESENT)
+        style = rnd.choice(["text", "testid", "replace"])
+        lit = re.search(r'\.(?:to_have_text|to_contain_text)\("([^"]*)"\)', line)
+        if style == "replace" and lit:
+            lines[i] = line.replace(lit.group(1), text)  # in the message too, so it doesn't contradict the check
+            return "\n".join(lines)
         indent = line[: len(line) - len(line.lstrip())]
-        lines.insert(i, f'{indent}expect(page.get_by_text("{text}"), "{text.split(":")[0].lower()} should show").to_be_visible()')
+        testid = rnd.choice(MISSING_TESTIDS)
+        loc = f'page.get_by_test_id("{testid}")' if style == "testid" else f'page.get_by_text("{text}")'
+        msg = rnd.choice(MESSAGES).format(testid.replace("-", " ") if style == "testid" else text.split(":")[0].lower())
+        lines.insert(i, f'{indent}expect({loc}, "{msg}").to_be_visible()')
         return "\n".join(lines)
     raise ValueError(kind)
+
+
+def _money(cents: int) -> str:
+    return f"{'-' if cents < 0 else ''}${abs(cents) // 100}.{abs(cents) % 100:02d}"
+
+
+def _wrong_value(line: str, rnd) -> str | None:
+    """A different expected value: another product's price, a rounded amount or a sign flip for money;
+    one more or one fewer for counts. None when the assertion has no value to change."""
+    import re
+    m = re.search(r'\.(?:to_have_text|to_contain_text|to_have_value)\("([^"]*)"\)', line)
+    if m:
+        old = m.group(1)
+        money = re.search(r"-?\$\d+\.\d\d", old)
+        if money:
+            amount = money.group(0)
+            cents = round(float(amount.replace("$", "")) * 100)
+            options = [_money(p) for p in PRICES if p != abs(cents)]
+            if cents % 100:
+                options.append(_money(round(cents / 100) * 100))  # rounded to whole dollars
+            if cents:
+                options.append(_money(-cents))                     # sign flipped
+            new = old.replace(amount, rnd.choice(options))
+        else:
+            num = re.search(r"\d+", old)
+            if not num:
+                return None
+            n = int(num.group(0))
+            new = old[:num.start()] + str(n + 1 if n == 0 or rnd.random() < 0.5 else n - 1) + old[num.end():]
+        return line.replace(old, new)
+    m = re.search(r'\.to_have_count\((\d+)\)', line)
+    if m:
+        n = int(m.group(1))
+        return line[:m.start(1)] + str(n + 1 if n == 0 or rnd.random() < 0.5 else n - 1) + line[m.end(1):]
+    return None
+
+
+def _page_of(testid: str, body: str) -> str:
+    """Which store page an element belongs to (nav elements: the page the test ends on)."""
+    for page, prefixes in PAGE_PREFIXES.items():
+        if testid.startswith(prefixes):
+            return page
+    for t in reversed(__import__("re").findall(r'get_by_test_id\("([\w-]+)"\)', body)):
+        if t not in ("nav-cart", "cart-count", "nav-home"):
+            return _page_of(t, "")
+    return "cart"
 
 
 def label(buggy: str, fixed: str) -> str | None:
@@ -381,13 +453,29 @@ def _group(r: dict) -> str:
     return r.get("group") or f"{r['bug']}-{r['variant']}-{r['rep']}"
 
 
-def split(seed: int = 1031, per_label: int = 20, min_train: int = 200) -> dict:
+def is_mutated(row: dict) -> bool:
+    """Broken by code (mut_*), as opposed to written by the model ("natural")."""
+    return row["variant"].startswith("mut_")
+
+
+def bucket(row: dict) -> str:
+    """Eval bucket: REPRODUCED, or NOT_REPRODUCED split by where the test came from."""
+    if row["label"] == "REPRODUCED":
+        return "REPRODUCED"
+    return "NR_mutated" if is_mutated(row) else "NR_natural"
+
+
+EVAL_PLAN = {"REPRODUCED": 20, "NR_natural": 10, "NR_mutated": 10}
+
+
+def split(seed: int = 1031, plan: dict | None = None, min_train: int = 200, max_mut_per_group: int = 1) -> dict:
     """Full set -> judge_data_all.jsonl (reference). Train/eval come from the failed-assertion slice only.
-    Eval is balanced: per_label groups held out for each slice label (REPRODUCED, NOT_REPRODUCED), BEFORE any
-    training, one row of that label per group; the held groups' other rows are left out of training too,
-    so no near-duplicate of an eval row is trained on."""
+    Eval: plan[bucket] groups held out per bucket, BEFORE any training, one row of that bucket per group; the
+    held groups' other rows are left out of training too, so no near-duplicate of an eval row is trained on.
+    Train: every natural row of the other groups, plus at most max_mut_per_group mutated rows per group."""
     import random
     from collections import Counter
+    plan = plan or EVAL_PLAN
     rows = [json.loads(line) for line in ROWS.read_text().splitlines()]
     dropped = [json.loads(line) for line in DROPPED.read_text().splitlines()] if DROPPED.exists() else []
     ALL.write_text("".join(json.dumps(r) + "\n" for r in rows + dropped))
@@ -396,26 +484,37 @@ def split(seed: int = 1031, per_label: int = 20, min_train: int = 200) -> dict:
     for r in sliced:
         by_group.setdefault(_group(r), []).append(r)
     rnd, held, eval_rows = random.Random(seed), set(), []
-    # the rarer label picks its groups first, so groups holding both labels can't all go to the other
-    for lab in sorted({"REPRODUCED", "NOT_REPRODUCED"}, key=lambda x: sum(r["label"] == x for r in sliced)):
-        groups = sorted(g for g, rs in by_group.items() if g not in held and any(r["label"] == lab for r in rs))
-        for g in rnd.sample(groups, min(per_label, len(groups))):
+    # the rarest bucket picks its groups first, so groups holding several buckets can't all go to another
+    for b in sorted(plan, key=lambda x: (sum(bucket(r) == x for r in sliced), x)):
+        groups = sorted(g for g, rs in by_group.items() if g not in held and any(bucket(r) == b for r in rs))
+        if len(groups) < plan[b]:
+            print(f"WARNING: only {len(groups)} groups with a {b} row (eval wants {plan[b]})")
+        for g in rnd.sample(groups, min(plan[b], len(groups))):
             held.add(g)
-            eval_rows.append(random.Random(f"{seed}-{g}").choice([r for r in by_group[g] if r["label"] == lab]))
-    train_rows = [r for g, rs in by_group.items() if g not in held for r in rs]
+            eval_rows.append(random.Random(f"{seed}-{g}").choice(sorted(
+                (r for r in by_group[g] if bucket(r) == b), key=lambda r: r["variant"])))
+    train_rows, capped = [], 0
+    for g in sorted(by_group):
+        if g in held:
+            continue
+        muts = sorted((r for r in by_group[g] if is_mutated(r)), key=lambda r: r["variant"])
+        keep = random.Random(f"{seed}-cap-{g}").sample(muts, min(max_mut_per_group, len(muts)))
+        capped += len(muts) - len(keep)
+        train_rows += [r for r in by_group[g] if not is_mutated(r)] + keep
     EVAL.write_text("".join(json.dumps(r) + "\n" for r in eval_rows))
     TRAIN.write_text("".join(json.dumps(r) + "\n" for r in train_rows))
 
     report = {"all": Counter(r["label"] for r in rows) + Counter({"DROPPED": len(dropped)}),
-              "slice": Counter(r["label"] for r in sliced), "train": Counter(r["label"] for r in train_rows),
-              "eval": Counter(r["label"] for r in eval_rows),
+              "slice": Counter(bucket(r) for r in sliced), "train": Counter(bucket(r) for r in train_rows),
+              "eval": Counter(bucket(r) for r in eval_rows),
               "train_variants": Counter((r["variant"], r["label"]) for r in train_rows),
               "eval_variants": Counter((r["variant"], r["label"]) for r in eval_rows),
-              "left_out": sum(len(by_group[g]) for g in held) - len(eval_rows)}
+              "left_out": sum(len(by_group[g]) for g in held) - len(eval_rows), "capped": capped}
     for name in ("all", "slice", "train", "eval"):
         c = report[name]
         print(f"  {name:<6} {sum(c.values()):>4} rows · " + " · ".join(f"{k} {v}" for k, v in sorted(c.items())))
-    print(f"  {report['left_out']} sibling row(s) of eval rows used in neither · files: {ALL.relative_to(ROOT)}, "
+    print(f"  {report['left_out']} sibling row(s) of eval rows used in neither · {capped} mutated row(s) over the "
+          f"{max_mut_per_group}-per-group cap left out of train · files: {ALL.relative_to(ROOT)}, "
           f"{TRAIN.relative_to(ROOT)}, {EVAL.relative_to(ROOT)}")
     for name in ("train_variants", "eval_variants"):
         print(f"  {name}: " + " · ".join(f"{v}/{lab[:3]} {n}" for (v, lab), n in sorted(report[name].items())))
@@ -475,6 +574,7 @@ def main():
         sys.exit("Cancelled.")
 
     app_url = os.getenv("APP_URL", "http://localhost:5173").rstrip("/")
+    os.environ.setdefault("LLM_RETRIES", "7")  # ~2 min of backoff: rides out a provider overload (503)
     ROWS.parent.mkdir(exist_ok=True)
     lock, done, state = Lock(), 0, {"spent": spent, "stop": False}
 
