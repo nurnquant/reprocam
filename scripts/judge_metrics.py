@@ -7,12 +7,65 @@ by rules) is a different number and is never reported as the model's.
     python scripts/judge_metrics.py            # the always-REPRODUCED baseline on the current eval set
 """
 import json
-import sys
 from pathlib import Path
 
+# Standard library only: this module also runs in the fw-cookbook environment (scripts/train_glimmer.py).
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
-from gen_judge_data import EVAL, bucket  # noqa: E402
+EVAL = ROOT / "data" / "judge_sft_eval.jsonl"     # the held-out slice, with variant/label metadata
+TRAIN = ROOT / "data" / "judge_sft_train.jsonl"
+ALL = ROOT / "data" / "judge_data_all.jsonl"
+UPLOAD_TRAIN = ROOT / "data" / "glimmer_upload_train.jsonl"  # messages only, binary instructions
+UPLOAD_EVAL = ROOT / "data" / "glimmer_upload_eval.jsonl"
+
+# The model judge only sees tests that failed an assertion, so its only answers are these two (TEST_ERROR is
+# decided by the rule layer). Glimmer is trained on these instructions, and every M9 eval (Glimmer base and
+# tuned, and the Muse Spark Open comparison) uses them word for word. The deployed product judge keeps its own.
+BINARY_SYSTEM = ('You judge whether a generated Playwright test reproduced the bug a tester reported. '
+                 'Answer with JSON only: {"verdict": "REPRODUCED" | "NOT_REPRODUCED"}')
+VERDICTS = ("REPRODUCED", "NOT_REPRODUCED")
+
+
+def is_mutated(row: dict) -> bool:
+    """Broken by code (mut_*), as opposed to written by the model ("natural")."""
+    return row["variant"].startswith("mut_")
+
+
+def bucket(row: dict) -> str:
+    """Eval bucket: REPRODUCED, or NOT_REPRODUCED split by where the test came from."""
+    if row["label"] == "REPRODUCED":
+        return "REPRODUCED"
+    return "NR_mutated" if is_mutated(row) else "NR_natural"
+
+
+def binary_messages(row: dict) -> list[dict]:
+    """A split row's chat with the binary instructions in place of its system prompt."""
+    return [{"role": "system", "content": BINARY_SYSTEM}] + row["messages"][1:]
+
+
+def write_upload_files() -> None:
+    """data/glimmer_upload_{train,eval}.jsonl from the split: messages only, binary instructions."""
+    for src, dst in ((TRAIN, UPLOAD_TRAIN), (EVAL, UPLOAD_EVAL)):
+        rows = [json.loads(line) for line in src.read_text().splitlines()]
+        dst.write_text("".join(json.dumps({"messages": binary_messages(r)}, ensure_ascii=False) + "\n" for r in rows))
+
+
+def parse_verdict(text: str) -> str:
+    """The verdict in a model answer, or "INVALID" (counted wrong) when there is none."""
+    start, end = (text or "").find("{"), (text or "").rfind("}")
+    try:
+        v = json.loads(text[start:end + 1]).get("verdict") if start != -1 and end > start else None
+    except (ValueError, AttributeError):
+        v = None
+    return v if v in VERDICTS else "INVALID"
+
+
+def load_eval() -> tuple[list[dict], list[dict]]:
+    """(eval rows with metadata, the same rows as binary chats), checked to be the same rows in the same order."""
+    meta = [json.loads(line) for line in EVAL.read_text().splitlines()]
+    chats = [json.loads(line) for line in UPLOAD_EVAL.read_text().splitlines()]
+    assert len(meta) == len(chats) and all(c["messages"] == binary_messages(m) for m, c in zip(meta, chats)), \
+        "glimmer_upload_eval.jsonl does not match judge_sft_eval.jsonl: rebuild it (gen_judge_data.py --export-binary)"
+    return meta, chats
 
 
 def _rate(pairs: list[tuple[str, str]]) -> float | None:
@@ -37,6 +90,21 @@ def score(rows: list[dict], predictions: list[str]) -> dict:
     }
 
 
+def end_to_end(eval_rows: list[dict], predictions: list[str], all_rows: list[dict]) -> dict:
+    """The whole judge on the held-out groups: the rule layer decides the rows that passed or crashed on the buggy
+    build (pass -> NOT_REPRODUCED, error -> TEST_ERROR, which match the oracle label by construction), the model
+    decides the failed-assertion rows. Includes rows the model never sees, so it is NOT the model's accuracy."""
+    groups = {r.get("group") for r in eval_rows}
+    rule_rows = [r for r in all_rows if r.get("group") in groups and r.get("label")
+                 and r["oracle"]["buggy"] != "assert_fail"]
+    rule = {"pass": "NOT_REPRODUCED", "error": "TEST_ERROR"}
+    rule_ok = sum(rule[r["oracle"]["buggy"]] == r["label"] for r in rule_rows)
+    model_ok = sum(p == r["label"] for r, p in zip(eval_rows, predictions))
+    n = len(rule_rows) + len(eval_rows)
+    return {"n": n, "rule_rows": len(rule_rows), "model_rows": len(eval_rows),
+            "accuracy": (rule_ok + model_ok) / n if n else None}
+
+
 def baseline(rows: list[dict]) -> dict:
     """The judge that always answers REPRODUCED."""
     return score(rows, ["REPRODUCED"] * len(rows))
@@ -54,7 +122,7 @@ def table(results: dict[str, dict]) -> str:
 
 
 if __name__ == "__main__":
-    eval_rows = [json.loads(line) for line in EVAL.read_text().splitlines()]
+    eval_rows, _ = load_eval()
     b = baseline(eval_rows)
     print(f"eval set: {b['n']} rows · {b['counts']}")
     print(table({"always REPRODUCED": b}))

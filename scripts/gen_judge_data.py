@@ -38,6 +38,7 @@ from serve_store import store_running  # noqa: E402
 from backend import testgen  # noqa: E402
 from backend.judge import judge_input  # noqa: E402
 from backend.runner import run_test  # noqa: E402
+from judge_metrics import bucket, is_mutated  # noqa: E402,F401  (eval buckets, shared with the eval code)
 
 ROWS = ROOT / "data" / "judge_sft_rows.jsonl"
 DROPPED = ROOT / "data" / "judge_sft_dropped.jsonl"
@@ -453,18 +454,6 @@ def _group(r: dict) -> str:
     return r.get("group") or f"{r['bug']}-{r['variant']}-{r['rep']}"
 
 
-def is_mutated(row: dict) -> bool:
-    """Broken by code (mut_*), as opposed to written by the model ("natural")."""
-    return row["variant"].startswith("mut_")
-
-
-def bucket(row: dict) -> str:
-    """Eval bucket: REPRODUCED, or NOT_REPRODUCED split by where the test came from."""
-    if row["label"] == "REPRODUCED":
-        return "REPRODUCED"
-    return "NR_mutated" if is_mutated(row) else "NR_natural"
-
-
 EVAL_PLAN = {"REPRODUCED": 20, "NR_natural": 10, "NR_mutated": 10}
 
 
@@ -554,7 +543,12 @@ def main():
     ap.add_argument("--split", action="store_true", help="write the held-out eval and train files, then exit")
     ap.add_argument("--relabel", action="store_true", help="re-run every row's oracle with ?fixonly, then exit")
     ap.add_argument("--mutate", action="store_true", help="add the assertion mutations of correct tests, then exit")
+    ap.add_argument("--export-binary", action="store_true",
+                    help="write data/glimmer_upload_{train,eval}.jsonl from the split (binary instructions), then exit")
     args = ap.parse_args()
+    if args.export_binary:
+        from judge_metrics import write_upload_files
+        return write_upload_files()
     if args.split:
         return split()
     if args.relabel:
