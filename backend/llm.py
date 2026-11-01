@@ -24,6 +24,17 @@ PROVIDERS = {
     "fireworks": ("FIREWORKS_BASE_URL", "FIREWORKS_API_KEY", "FIREWORKS_MODEL"),
 }
 
+# Most images one request may carry, per provider (None = no limit we have hit). Baseten answers
+# "400 - Too many images: 13 (max 8)" above 8.
+IMAGE_LIMIT = {"meta": None, "fireworks": None, "baseten": 8}
+
+
+def image_limit(provider: str | None = None) -> int | None:
+    provider = (provider or os.getenv("LLM_PROVIDER", "meta")).lower()
+    override = os.getenv(f"MAX_IMAGES_{provider.upper()}")
+    return int(override) if override else IMAGE_LIMIT.get(provider)
+
+
 CALL_LOG = Path(__file__).resolve().parent.parent / "data" / "llm_calls.jsonl"
 RETRY_STATUS = {429, 500, 502, 503, 504}
 # One output budget for every stage and effort level (reasoning tokens count against it).

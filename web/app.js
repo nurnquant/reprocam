@@ -193,7 +193,9 @@ function tick(t) {
 
 function badge(e) {
   if (e.stage === "segment" && e.status !== "start") {
-    const pick = /Muse Spark/.test(e.detail) ? " → <b>Muse Spark Open</b> · Fireworks · effort low" : "";
+    // cached samples predate pick_provider; they were all made on Fireworks
+    const via = esc(PROVIDERS[e.pick_provider] || e.pick_provider || "Fireworks");
+    const pick = /Muse Spark/.test(e.detail) ? ` → <b>Muse Spark Open</b> · ${via} · effort low` : "";
     return `<b>SAM 3.1</b> · Meta Model API${pick}`;
   }
   if (e.model) {
@@ -495,6 +497,10 @@ $("fix-btn").onclick = async () => {
 };
 
 ownerToken();  // strip ?owner= from the address bar right away
+api("/api/config").then((c) => {  // where Muse Spark Open is served for live runs
+  const node = document.getElementById("foot-provider");
+  if (node && c.llm_provider) node.textContent = PROVIDERS[c.llm_provider] || c.llm_provider;
+}).catch(() => {});
 loadSamples().then(() => {
   const q = new URLSearchParams(location.search);
   if (q.get("sample")) startReplay(q.get("sample"));

@@ -58,6 +58,8 @@ class Run:
                  "model": meta and meta.get("model"), "provider": meta and meta.get("provider"),
                  "effort": meta and meta.get("effort"), "attempt": attempt, "detail": detail,
                  "artifact": artifact and os.path.relpath(artifact, self.dir)}
+        if meta and meta.get("pick_provider"):
+            event["pick_provider"] = meta["pick_provider"]
         with self.events.open("a") as f:
             f.write(json.dumps(event) + "\n")
         tag = f"[{event['t']:6.1f}s] {stage:<10} {status:<5}"
@@ -123,7 +125,8 @@ def make_evidence(run: Run, run_dir: Path, from_steps: bool):
     frames = sum(t["frames_processed"] or 0 for t in r["tried"])
     run.emit("segment", "ok", f"{r['method']} · SAM {r['sam_mode']} mode, boxes on bug frame: {tried}; "
              f"{frames} frame(s) processed",
-             {"model": "sam-3.1", "provider": "meta", "effort": None},
+             {"model": "sam-3.1", "provider": "meta", "effort": None,
+              "pick_provider": next((c.get("provider") for c in r["calls"]), None)},
              artifact=run_dir / "evidence.png", record=False)  # calls already recorded above
 
 

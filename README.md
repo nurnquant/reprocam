@@ -92,6 +92,10 @@ On our 3 bugs no effort level was clearly better (7/9, 8/9, 7/9); we use low for
   `expected` against; such runs end "REPRODUCED · not verified".
 - **SAM finds things, not meanings.** "order total" returns no boxes; "price" returns every price. Muse Spark picks
   the claimed one, and the evidence image says so.
+- **Baseten takes at most 8 images per request.** The live app serves Muse Spark Open from Baseten, so
+  understanding sees the first and last keyframes plus the 6 that changed most, not every distinct frame
+  (Fireworks took all of them; the measured results above were on Fireworks). On bug1 the 8 frames were enough
+  for the right steps and claim (one check, not a measured rate).
 - **Local runs use a subprocess, not a sandbox.** Generated tests get no API keys locally either, but only the
   deployed app (`REPRO_SANDBOX=modal`) runs them in an isolated, network-blocked Modal Sandbox.
 

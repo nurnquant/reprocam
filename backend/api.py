@@ -124,6 +124,13 @@ def _sse(obj, event: str | None = None) -> str:
 
 # ---------- live runs ----------
 
+@app.get("/api/config")
+def get_config():
+    """What the page needs to label live runs: where Muse Spark Open is served from."""
+    from backend.llm import image_limit
+    return {"llm_provider": os.getenv("LLM_PROVIDER", "meta").lower(), "max_images": image_limit()}
+
+
 @app.get("/api/budget")
 def get_budget(request: Request):
     return budget.status(client_ip(request))

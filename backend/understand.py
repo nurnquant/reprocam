@@ -15,7 +15,7 @@ from pathlib import Path
 from PIL import Image, ImageChops
 
 from backend import dom_snapshot
-from backend.llm import chat
+from backend.llm import chat, image_limit
 
 PROMPTS = Path(__file__).resolve().parent / "prompts"
 DEFAULT_PROMPT = "v1"  # v2 only becomes the default if it is at least as stable on all 3 bugs
@@ -36,18 +36,29 @@ def _small(path: Path) -> Image.Image:
     return im.resize((320, max(1, round(320 * im.height / im.width))))
 
 
-def distinct_frames(run_dir: Path, frames: list[dict]) -> list[dict]:
-    """Drop near-duplicate frames, always keeping the first and the last."""
-    kept, last = [], None
+def distinct_frames(run_dir: Path, frames: list[dict], limit: int | None = None) -> list[dict]:
+    """Drop near-duplicate frames, always keeping the first and the last. With a limit (providers that cap
+    images per request), keep the first, the last and the frames that changed most, in time order."""
+    kept, changes, last = [], [], None
     for i, f in enumerate(frames):
         img = _small(run_dir / f["path"])
-        if last is not None and i != len(frames) - 1:
-            diff = ImageChops.difference(last, img).point(lambda v: 255 if v > 24 else 0)
-            if diff.histogram()[255] < DUP_PIXELS:
+        changed = None
+        if last is not None:
+            changed = ImageChops.difference(last, img).point(lambda v: 255 if v > 24 else 0).histogram()[255]
+            if i != len(frames) - 1 and changed < DUP_PIXELS:
                 continue
         kept.append(f)
+        changes.append(changed)
         last = img
-    return kept
+    return limit_frames(kept, changes, limit)
+
+
+def limit_frames(frames: list[dict], changes: list[int | None], limit: int | None) -> list[dict]:
+    """At most `limit` frames: the first, the last, then the largest changes; time order is kept."""
+    if not limit or len(frames) <= limit:
+        return frames
+    middle = sorted(range(1, len(frames) - 1), key=lambda i: (-(changes[i] or 0), i))[: max(0, limit - 2)]
+    return [frames[i] for i in sorted({0, len(frames) - 1, *middle})]
 
 
 def schema(testids: list[str], frame_ns: list[int]) -> dict:
@@ -96,10 +107,10 @@ def understand(run_dir: str | Path, effort: str | None = None, provider: str | N
     transcript_file = run_dir / "transcript.json"
     transcript = json.loads(transcript_file.read_text())["transcript"].strip() if transcript_file.exists() else ""
     rows = dom_snapshot.load_or_build()
-    frames = distinct_frames(run_dir, manifest["frames"])
+    frames = distinct_frames(run_dir, manifest["frames"], image_limit(provider))
 
     content = [{"type": "text", "text": f"Keyframes ({len(frames)} of {len(manifest['frames'])}, "
-                                        f"duplicates removed), recording length {manifest['duration']:.1f}s:"}]
+                                        f"duplicates removed{', most-changed kept' if len(frames) == image_limit(provider) else ''}), recording length {manifest['duration']:.1f}s:"}]
     for f in frames:
         content.append({"type": "text", "text": f"Frame {f['n']} at {f['t']:.1f}s"})
         content.append(_image_part(run_dir / f["path"]))
