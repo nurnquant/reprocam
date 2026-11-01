@@ -1,41 +1,41 @@
 {
   "baseten": {
-    "model": "meta-models/muse-spark-open",
+    "model": "meta-models/muse-spark-open-1026",
     "efforts": {
       "none": {
         "ok": true,
         "answer": "36",
-        "reasoning_tokens": 132,
-        "completion_tokens": 143,
-        "seconds": 1.4
+        "reasoning_tokens": 197,
+        "completion_tokens": 208,
+        "seconds": 1.0
       },
       "minimal": {
         "ok": true,
         "answer": "36",
-        "reasoning_tokens": 139,
-        "completion_tokens": 150,
+        "reasoning_tokens": 156,
+        "completion_tokens": 167,
         "seconds": 1.0
       },
       "low": {
         "ok": true,
         "answer": "36",
-        "reasoning_tokens": 164,
-        "completion_tokens": 175,
+        "reasoning_tokens": 195,
+        "completion_tokens": 206,
         "seconds": 0.9
       },
       "medium": {
         "ok": true,
         "answer": "36",
-        "reasoning_tokens": 477,
-        "completion_tokens": 488,
-        "seconds": 2.0
+        "reasoning_tokens": 383,
+        "completion_tokens": 394,
+        "seconds": 1.4
       },
       "high": {
         "ok": true,
         "answer": "36",
         "reasoning_tokens": 337,
         "completion_tokens": 348,
-        "seconds": 1.4
+        "seconds": 1.5
       }
     },
     "image": {
