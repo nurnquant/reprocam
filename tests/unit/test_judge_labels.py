@@ -80,18 +80,27 @@ def test_missing_import_mutation_is_an_error_when_run(tmp_path):
     assert r["outcome"] == "error" and r["exc_type"].endswith("NameError")
 
 
-def test_split_keeps_groups_on_one_side(tmp_path, monkeypatch):
+def test_split_uses_only_the_failed_assertion_slice_and_keeps_groups_together(tmp_path, monkeypatch):
     import gen_judge_data as g
-    rows = [{"bug": "b", "variant": v, "rep": i, "group": f"g{i}", "label": "X"} for i in range(60) for v in ("correct", "mut_x")]
-    monkeypatch.setattr(g, "ROWS", tmp_path / "rows.jsonl")
-    monkeypatch.setattr(g, "EVAL", tmp_path / "eval.jsonl")
-    monkeypatch.setattr(g, "TRAIN", tmp_path / "train.jsonl")
+    rows = []
+    for i in range(70):  # each group: a correct test (in the slice) + a broken copy (error: not in the slice)
+        rows.append({"bug": "b", "variant": "correct", "rep": i, "group": f"g{i}", "label": "REPRODUCED",
+                     "oracle": {"buggy": "assert_fail", "fixed": "pass"}})
+        rows.append({"bug": "b", "variant": "mut_x", "rep": i, "group": f"g{i}", "label": "TEST_ERROR",
+                     "oracle": {"buggy": "error", "fixed": "error"}})
+    rows += [{"bug": "b", "variant": "trivial", "rep": i, "group": f"t{i}", "label": "NOT_REPRODUCED",
+              "oracle": {"buggy": "pass", "fixed": "pass"}} for i in range(30)]
+    for name in ("ROWS", "EVAL", "TRAIN", "ALL", "DROPPED"):
+        monkeypatch.setattr(g, name, tmp_path / f"{name}.jsonl")
     monkeypatch.setattr(g, "ROOT", tmp_path)
     g.ROWS.write_text("".join(json.dumps(r) + "\n" for r in rows))
-    g.split()
+    report = g.split(min_train=10)
     ev = [json.loads(line) for line in g.EVAL.read_text().splitlines()]
     tr = [json.loads(line) for line in g.TRAIN.read_text().splitlines()]
-    assert len(ev) == 40 and len({r["group"] for r in ev}) == 40
+    assert all(r["oracle"]["buggy"] == "assert_fail" for r in ev + tr)       # the slice only
+    assert len(ev) == 40 and len({r["group"] for r in ev}) == 40 and len(tr) == 30
     assert not {r["group"] for r in ev} & {r["group"] for r in tr}
-    g.split()
+    assert len(g.ALL.read_text().splitlines()) == len(rows)                     # full set kept for reference
+    assert report["slice"]["REPRODUCED"] == 70 and "TEST_ERROR" not in report["slice"]
+    g.split(min_train=10)
     assert [json.loads(line) for line in g.EVAL.read_text().splitlines()] == ev  # fixed seed: same eval set

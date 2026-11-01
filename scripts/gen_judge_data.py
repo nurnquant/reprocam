@@ -11,7 +11,7 @@ mutated copy (broken selector on an action, missing import, or wrong start page,
 extra model cost. Each test runs on the buggy build (?train=1&fixed=0) and the fixed build (?fixed=1);
 LABELS turns the two outcomes into the verdict. Demo bugs 1-3 never appear here: they stay held out.
 
-    python scripts/gen_judge_data.py --split    # 40 random rows (seed 1031, one per group) -> eval file
+    python scripts/gen_judge_data.py --split    # train/eval from the failed-assertion slice; 40 held out (seed 1031)
 
 
 Rows: data/judge_sft_rows.jsonl (chat format in "messages" + metadata); cells the table drops go to
@@ -121,6 +121,7 @@ PLAN = {"correct": 31, "wrong_assertion": 18, "missing_step": 13, "unrelated_ass
 MUTATIONS = ["broken_selector", "missing_import", "wrong_page"]
 EVAL = ROOT / "data" / "judge_sft_eval.jsonl"
 TRAIN = ROOT / "data" / "judge_sft_train.jsonl"
+ALL = ROOT / "data" / "judge_data_all.jsonl"
 
 
 def mutate(code: str, kind: str) -> str | None:
@@ -213,23 +214,48 @@ def make_rows(bug: str, variant: str, rep: int, app_url: str) -> list[dict]:
     return rows
 
 
-def split(seed: int = 1031, n_eval: int = 40) -> None:
-    """Hold out n_eval random rows, one per group, BEFORE any training; their group siblings are left out of
+def in_slice(row: dict) -> bool:
+    """What the model judge sees in production: the rule layer handles passes and crashes first, so the
+    model only judges tests that failed an assertion on the buggy build (labels: REPRODUCED or NOT_REPRODUCED)."""
+    return row.get("label") is not None and row["oracle"]["buggy"] == "assert_fail"
+
+
+def _group(r: dict) -> str:
+    return r.get("group") or f"{r['bug']}-{r['variant']}-{r['rep']}"
+
+
+def split(seed: int = 1031, n_eval: int = 40, min_train: int = 200) -> dict:
+    """Full set -> judge_data_all.jsonl (reference). Train/eval come from the failed-assertion slice only:
+    n_eval random rows held out BEFORE any training, one per group; their group siblings are left out of
     training too, so no near-duplicate of an eval row is trained on."""
     import random
+    from collections import Counter
     rows = [json.loads(line) for line in ROWS.read_text().splitlines()]
-    groups = sorted({r.get("group") or f"{r['bug']}-{r['variant']}-{r['rep']}" for r in rows})
-    held = set(random.Random(seed).sample(groups, n_eval))
+    dropped = [json.loads(line) for line in DROPPED.read_text().splitlines()] if DROPPED.exists() else []
+    ALL.write_text("".join(json.dumps(r) + "\n" for r in rows + dropped))
+    sliced = [r for r in rows if in_slice(r)]
     by_group = {}
-    for r in rows:
-        by_group.setdefault(r.get("group") or f"{r['bug']}-{r['variant']}-{r['rep']}", []).append(r)
+    for r in sliced:
+        by_group.setdefault(_group(r), []).append(r)
+    held = set(random.Random(seed).sample(sorted(by_group), n_eval))
     eval_rows = [random.Random(f"{seed}-{g}").choice(by_group[g]) for g in sorted(held)]
     train_rows = [r for g, rs in by_group.items() if g not in held for r in rs]
     EVAL.write_text("".join(json.dumps(r) + "\n" for r in eval_rows))
     TRAIN.write_text("".join(json.dumps(r) + "\n" for r in train_rows))
-    left_out = sum(len(by_group[g]) for g in held) - len(eval_rows)
-    print(f"eval {len(eval_rows)} rows -> {EVAL.relative_to(ROOT)} · train {len(train_rows)} rows -> "
-          f"{TRAIN.relative_to(ROOT)} · {left_out} sibling row(s) of eval rows used in neither")
+
+    report = {"all": Counter(r["label"] for r in rows) + Counter({"DROPPED": len(dropped)}),
+              "slice": Counter(r["label"] for r in sliced), "train": Counter(r["label"] for r in train_rows),
+              "eval": Counter(r["label"] for r in eval_rows),
+              "left_out": sum(len(by_group[g]) for g in held) - len(eval_rows)}
+    for name in ("all", "slice", "train", "eval"):
+        c = report[name]
+        print(f"  {name:<6} {sum(c.values()):>4} rows · " + " · ".join(f"{k} {v}" for k, v in sorted(c.items())))
+    print(f"  {report['left_out']} sibling row(s) of eval rows used in neither · files: {ALL.relative_to(ROOT)}, "
+          f"{TRAIN.relative_to(ROOT)}, {EVAL.relative_to(ROOT)}")
+    if len(train_rows) < min_train:
+        print(f"STOP: only {len(train_rows)} training rows in the failed-assertion slice (< {min_train}). "
+              f"Generate more variants that reach an assertion before training.")
+    return report
 
 
 def project(todo: list, rows_now: list[dict]) -> None:
