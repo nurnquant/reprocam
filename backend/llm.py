@@ -51,6 +51,14 @@ def get_client(provider: str | None = None) -> tuple[OpenAI, str]:
     return OpenAI(base_url=os.environ[url_var], api_key=key, max_retries=0), os.environ[model_var]
 
 
+def model_label(model: str | None) -> str:
+    """Display name for a recorded model id (same table as MODEL_NAMES in web/app.js)."""
+    m = model or ""
+    if "muse-spark-open" in m:
+        return "Muse Spark Open"
+    return "Muse Spark" if "muse-spark" in m else m
+
+
 def effort_for(stage: str) -> str:
     return os.getenv(f"EFFORT_{stage.upper()}", "low")
 

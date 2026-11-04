@@ -24,7 +24,7 @@ const STAGES = {
 const TOOLS = { frames: "ffmpeg", run: "pytest · Playwright", fixcheck: "pytest · Playwright", ticket: "ReproCam" };
 const MODEL_NAMES = [
   [/muse-spark-open/, "Muse Spark Open"], [/muse-spark/, "Muse Spark"],
-  [/voice-transcribe/, "Voice Transcribe"], [/sam-3/, "SAM 3.1"],
+  [/voice-transcribe/, "Muse Voice Transcribe"], [/sam-3/, "SAM 3.1"],
 ];
 const PROVIDERS = { fireworks: "Fireworks", baseten: "Baseten", meta: "Meta Model API" };
 
@@ -69,7 +69,7 @@ function reset(label) {
   $("failure").textContent = "";
   $("code").innerHTML = '<span class="placeholder">The generated test appears here once it\'s written.</span>';
   for (const s of ["stamp-buggy", "stamp-fixed"]) $(s).dataset.state = "idle";
-  $("board").innerHTML = '<p class="placeholder">After the bug is reproduced, SAM 3.1 boxes the candidates and Muse Spark picks the one the claim is about.</p>';
+  $("board").innerHTML = '<p class="placeholder">After the bug is reproduced, this shows the candidate boxes and the one the claim is about.</p>';
   $("sam-steps").hidden = true;
   $("evidence-replay").hidden = true;
   $("ticket").innerHTML = '<p class="placeholder">Filed only when the bug is reproduced.</p>';
@@ -193,10 +193,11 @@ function tick(t) {
 
 function badge(e) {
   if (e.stage === "segment" && e.status !== "start") {
-    // cached samples predate pick_provider; they were all made on Fireworks
-    const via = esc(PROVIDERS[e.pick_provider] || e.pick_provider || "Fireworks");
-    const pick = /Muse Spark/.test(e.detail) ? ` → <b>Muse Spark Open</b> · ${via} · effort low` : "";
-    return `<b>SAM 3.1</b> · Meta Model API${pick}`;
+    // older runs recorded the pick's model only in segment.json, which the summary carries
+    const d = e.pick_model ? { model: e.pick_model, provider: e.pick_provider, effort: e.pick_effort }
+      : state.summary?.segment?.decider;
+    const pick = d?.model ? ` → <b>${esc(modelName(d.model))}</b> · ${esc(PROVIDERS[d.provider] || d.provider)}${d.effort ? ` · effort ${esc(d.effort)}` : ""}` : "";
+    return `<b>${esc(modelName(e.model))}</b> · ${esc(PROVIDERS[e.provider] || e.provider)}${pick}`;
   }
   if (e.model) {
     const parts = [`<b>${esc(modelName(e.model))}</b>`, esc(PROVIDERS[e.provider] || e.provider)];
@@ -239,6 +240,7 @@ async function onEvent(e) {
   if (e.stage === "frames" && e.status === "ok") renderFilmstrip(s);
   if (e.stage === "transcribe" && e.status === "ok" && s.transcript) {
     $("transcript-text").textContent = `“${s.transcript}”`;
+    $("transcript-caption").textContent = s.models?.transcribe ? `narration · ${modelName(s.models.transcribe)}` : "narration";
     $("transcript").hidden = false;
   }
   if (e.stage === "understand" && e.status === "ok") { markBugFrame(s); renderClaim(s); }
@@ -311,6 +313,7 @@ function markBugFrame(s) {
 function renderClaim(s) {
   const c = s.steps?.bug_claim;
   if (!c) return;
+  $("claim-badge").textContent = s.models?.understand ? `bug_claim · ${modelName(s.models.understand)}` : "bug_claim";
   $("claim-summary").textContent = c.summary;
   $("claim-expected").textContent = c.expected;
   $("claim-actual").textContent = c.actual;
@@ -355,7 +358,7 @@ function stamp(id, st) {
   if (st === "pass" || st === "fail") el.classList.add("thump");
 }
 
-// ---------- evidence: SAM proposes, Muse Spark decides ----------
+// ---------- evidence: SAM proposes, a model decides (labels come from what the run recorded) ----------
 
 function playEvidence(seg) {
   const cands = seg.candidates?.length ? seg.candidates : [seg.box];
@@ -371,10 +374,15 @@ function playEvidence(seg) {
   $("evidence-replay").hidden = false;
 
   const tried = seg.tried?.find((t) => t.on_bug_frame) || seg.tried?.at(-1);
+  const sam = modelName(seg.sam_model) || "SAM";
+  const decider = modelName(seg.decider?.model);
   $("sam-propose").textContent = seg.candidates?.length
     ? `${cands.length} boxes for “${seg.concept}”` + (seg.tried?.length > 1 ? ` (“${seg.tried[0].concept}” found none)` : "")
-    : /SAM found nothing/.test(seg.method) ? "no boxes; Muse Spark located it instead" : `1 box for “${tried?.concept}”`;
-  $("sam-decide").textContent = seg.candidates?.length ? `#${chosen}: ${seg.pick_reason}` : seg.method;
+    : /SAM found nothing/.test(seg.method) ? `no boxes; ${decider} located it instead` : `1 box for “${tried?.concept}”`;
+  $("sam-propose-label").textContent = `${sam} proposes`;
+  $("sam-decide-label").textContent = seg.decider?.model ? `${decider} decides` : "Nothing to decide";
+  $("sam-decide").textContent = seg.candidates?.length ? `#${chosen}: ${seg.pick_reason}`
+    : seg.decider?.model ? seg.method : `${sam} found one box`;
 
   img.onload = () => {
     const fw = img.naturalWidth, fh = img.naturalHeight;
@@ -390,7 +398,7 @@ function playEvidence(seg) {
       inner.append(d);
     });
     // Zoom: the 4:3 board first shows the whole frame, then fits the candidates (SAM proposes),
-    // then dims all but the chosen box (Muse Spark decides). Borders stay thin via --s.
+    // then dims all but the chosen box (the decider). Borders stay thin via --s.
     const W = board.querySelector(".zoom").clientWidth, H = W * 0.75, d = W / fw;
     const view = (s, x0, y0) => `translate(${-x0 * d * s}px, ${-y0 * d * s}px) scale(${s})`;
     inner.style.transform = view(1, 0, -(H / d - fh) / 2);
@@ -497,9 +505,11 @@ $("fix-btn").onclick = async () => {
 };
 
 ownerToken();  // strip ?owner= from the address bar right away
-api("/api/config").then((c) => {  // where Muse Spark Open is served for live runs
-  const node = document.getElementById("foot-provider");
-  if (node && c.llm_provider) node.textContent = PROVIDERS[c.llm_provider] || c.llm_provider;
+api("/api/config").then((c) => {  // what the deployed app is configured to use
+  const names = [c.transcribe_model, c.understand_model, c.llm_model, c.sam_model].map(modelName);
+  const open = /open/.test(c.llm_model || "") ? ` (open weights, on ${PROVIDERS[c.llm_provider] || c.llm_provider})` : "";
+  const shown = [...new Set(names)].map((n) => (n === modelName(c.llm_model) ? n + open : n));
+  document.getElementById("foot-run").textContent = `Every model in the product is a Meta model: ${shown.join(" · ")}.`;
 }).catch(() => {});
 loadSamples().then(() => {
   const q = new URLSearchParams(location.search);

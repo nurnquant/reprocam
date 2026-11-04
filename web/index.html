@@ -47,13 +47,13 @@
         </div>
         <figure class="transcript" id="transcript" hidden>
           <blockquote id="transcript-text"></blockquote>
-          <figcaption>narration · Muse Voice Transcribe</figcaption>
+          <figcaption id="transcript-caption">narration</figcaption>
         </figure>
         <div class="filmstrip" id="filmstrip" aria-label="Keyframes sent to the model"></div>
         <section class="claim" id="claim" hidden>
           <header>
             <h2>What the agent understood</h2>
-            <span class="claim-badge">bug_claim · Muse Spark Open</span>
+            <span class="claim-badge" id="claim-badge">bug_claim</span>
           </header>
           <p class="claim-summary" id="claim-summary"></p>
           <div class="claim-cols">
@@ -99,12 +99,11 @@
           <button class="link" id="evidence-replay" hidden>replay</button>
         </header>
         <div class="board" id="board">
-          <p class="placeholder">After the bug is reproduced, SAM 3.1 boxes the candidates and Muse Spark picks the one
-            the claim is about.</p>
+          <p class="placeholder">After the bug is reproduced, this shows the candidate boxes and the one the claim is about.</p>
         </div>
         <ol class="sam-steps" id="sam-steps" hidden>
-          <li data-step="propose"><b>SAM 3.1 proposes</b> <span id="sam-propose"></span></li>
-          <li data-step="decide"><b>Muse Spark decides</b> <span id="sam-decide"></span></li>
+          <li data-step="propose"><b id="sam-propose-label"></b> <span id="sam-propose"></span></li>
+          <li data-step="decide"><b id="sam-decide-label"></b> <span id="sam-decide"></span></li>
         </ol>
       </article>
 
@@ -119,7 +118,7 @@
   </main>
 
   <footer class="foot">
-    <span id="foot-run">Every model in the product is a Meta model: Muse Voice Transcribe · Muse Spark · Muse Spark Open (open weights, on <span id="foot-provider">Fireworks</span>) · SAM 3.1.</span>
+    <span id="foot-run">Every model in the product is a Meta model.</span>
     <a class="store-link" href="/store/index.html?fixed=0&amp;reset=1" target="_blank" rel="noopener">practice store ↗</a>
     <span id="foot-cost"></span>
   </footer>

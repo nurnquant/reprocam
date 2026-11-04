@@ -77,6 +77,17 @@ def _json(path: Path):
     return json.loads(path.read_text()) if path.exists() else None
 
 
+def recorded_models(d: Path) -> dict:
+    """{stage: model id} as recorded in the run's events, so the UI never assumes a model."""
+    models = {}
+    events = d / "events.jsonl"
+    for line in events.read_text().splitlines() if events.exists() else []:
+        e = json.loads(line)
+        if e.get("model"):
+            models[e["stage"]] = e["model"]
+    return models
+
+
 def summary(d: Path, kind: str) -> dict:
     """Everything the UI shows for a finished (or running) run, with artifact URLs."""
     base = f"/{kind}/{d.name}/files/"
@@ -94,7 +105,10 @@ def summary(d: Path, kind: str) -> dict:
         })
     seg = _json(d / "segment.json")
     if seg:
-        seg = {k: seg.get(k) for k in ("method", "sam_mode", "concept", "candidates", "picked", "pick_reason", "box")} | {
+        call = next(iter(seg.get("calls") or []), None)  # the model call that picked or located the box, if any
+        decider = call and {k: call.get(k) for k in ("model", "provider", "effort")}
+        sam_model = next((t.get("model") for t in seg.get("tried", []) if t.get("model")), None)
+        seg = {"decider": decider, "sam_model": sam_model} | {k: seg.get(k) for k in ("method", "sam_mode", "concept", "candidates", "picked", "pick_reason", "box")} | {
             "frame_url": base + seg["frame"]["path"], "tried": [
                 {k: t.get(k) for k in ("concept", "mode", "boxes", "on_bug_frame", "frames_processed")}
                 for t in seg.get("tried", [])]}
@@ -107,7 +121,7 @@ def summary(d: Path, kind: str) -> dict:
                       if (d / f["path"]).exists()],
         "video_url": base + "video.mp4" if (d / "video.mp4").exists() else
                      (f"/runs/{d.name}/video" if kind == "runs" and _upload(d.name) else None),
-        "attempts": attempts, "segment": seg,
+        "attempts": attempts, "segment": seg, "models": recorded_models(d),
         "evidence_url": base + "evidence.png" if (d / "evidence.png").exists() else None,
         "ticket_md": (d / "ticket.md").read_text() if (d / "ticket.md").exists() else None,
         "files_base": base,
@@ -130,7 +144,10 @@ def get_config():
     from backend.llm import PROVIDERS, image_limit
     understand = (os.getenv("UNDERSTAND_PROVIDER") or os.getenv("LLM_PROVIDER", "meta")).lower()
     provider = os.getenv("LLM_PROVIDER", "meta").lower()
-    return {"llm_provider": provider, "llm_model": os.getenv(PROVIDERS[provider][2]), "max_images": image_limit(),
+    from backend.segment import MODEL as SAM_MODEL
+    from backend.transcribe import MODEL as TRANSCRIBE_MODEL
+    return {"transcribe_model": TRANSCRIBE_MODEL, "sam_model": SAM_MODEL,
+            "llm_provider": provider, "llm_model": os.getenv(PROVIDERS[provider][2]), "max_images": image_limit(),
             "understand_provider": understand, "understand_model": os.getenv(PROVIDERS[understand][2]),
             "understand_max_images": image_limit(understand)}
 

@@ -23,7 +23,7 @@ reason (retry loop otherwise). After the fix, the same test passes.
   Reference: github.com/meta-models/meta-model-cookbook/tree/main/07_sam/01_api_basics
 - SAM 3.1 for evidence runs in image mode on the bug_claim frame by default; video tracking only with
   `SAM_VIDEO_TRACK=1`. SAM finds UI objects ("price", "button") but not meanings ("order total"):
-  SAM proposes boxes, Muse Spark picks one (`backend/segment.py`).
+  SAM proposes boxes, Muse Spark Open picks one (`backend/segment.py`).
 - Muse Spark returns boxes on a 0–1000 scale on both axes, never in pixels. Always ask for 0–1000
   and convert (x × width / 1000, y × height / 1000).
 - Cost guard: public demo replays cached runs; live runs capped by MAX_RUNS_PER_DAY.

@@ -1,4 +1,4 @@
-"""SAM 3.1: find the broken element on the bug frame -> evidence.png ("SAM proposes, Muse Spark decides").
+"""SAM 3.1: find the broken element on the bug frame -> evidence.png ("SAM proposes, Muse Spark Open decides").
 
     python -m backend.segment runs/bug1 [--concept "order total" --concept price ...] [--no-sam]
 
@@ -13,8 +13,8 @@ frame's time are used. Every SAM request is logged to data/llm_calls.jsonl with 
 SAM finds UI objects (buttons, prices) well but not meanings ("order total" returns nothing,
 "price" returns every price). So:
   1. try the claim's element, then generic concepts, until SAM has boxes on the bug frame;
-  2. one box -> done; several -> Muse Spark picks one from a numbered overlay;
-  3. no boxes at all -> fallback: Muse Spark returns a box itself (0-1000 scale on both axes).
+  2. one box -> done; several -> Muse Spark Open picks one from a numbered overlay;
+  3. no boxes at all -> fallback: Muse Spark Open returns a box itself (0-1000 scale on both axes).
 All boxes are in the bug frame's pixels. evidence.png and segment.json say which model drew it.
 """
 import asyncio
@@ -33,7 +33,7 @@ from meta_sam_parser import image_segmentation_format, parse_responses_stream, v
 from openai import AsyncOpenAI
 from PIL import Image, ImageDraw, ImageFont, ImageStat
 
-from backend.llm import chat, log_call
+from backend.llm import chat, log_call, model_label
 
 load_dotenv()
 
@@ -212,7 +212,7 @@ def _jpeg_url(img: Image.Image) -> str:
 
 
 def pick_box(frame_path: Path, boxes: list[dict], claim: dict) -> tuple[int, str, dict]:
-    """Muse Spark picks which numbered SAM box is the claimed element."""
+    """Muse Spark Open picks which numbered SAM box is the claimed element."""
     img = Image.open(frame_path).convert("RGB")
     draw = ImageDraw.Draw(img)
     font = ImageFont.load_default(size=14)
@@ -231,7 +231,7 @@ def pick_box(frame_path: Path, boxes: list[dict], claim: dict) -> tuple[int, str
 
 
 def locate_box(frame_path: Path, claim: dict) -> tuple[dict, dict]:
-    """Fallback when SAM finds nothing: Muse Spark returns a box (0-1000 scale), converted to pixels."""
+    """Fallback when SAM finds nothing: Muse Spark Open returns a box (0-1000 scale), converted to pixels."""
     img = Image.open(frame_path).convert("RGB")
     coord = {"type": "integer", "minimum": 0, "maximum": 1000}
     schema = {"type": "json_schema", "json_schema": {"name": "box", "strict": True, "schema": {
@@ -250,7 +250,7 @@ def locate_box(frame_path: Path, claim: dict) -> tuple[dict, dict]:
 
 
 async def evidence(run_dir: Path, concepts: list[str] | None = None, use_sam: bool = True) -> dict:
-    """SAM (+ Muse Spark pick) or Muse Spark fallback -> run_dir/evidence.png + segment.json."""
+    """SAM (+ Muse Spark Open pick) or Muse Spark Open fallback -> run_dir/evidence.png + segment.json."""
     steps = json.loads((run_dir / "steps.json").read_text())
     frames = json.loads((run_dir / "frames.json").read_text())
     claim = steps["bug_claim"]
@@ -282,12 +282,12 @@ async def evidence(run_dir: Path, concepts: list[str] | None = None, use_sam: bo
         chosen, method = near[0], "SAM 3.1"
     elif near:
         i, reason, meta = pick_box(frame_path, near, claim)
-        chosen, method = near[i], "SAM 3.1 + Muse Spark pick"
+        chosen, method = near[i], f"SAM 3.1 + {model_label(meta.get('model'))} pick"
         report.update(candidates=near, picked=i, pick_reason=reason)
         report["calls"].append(meta)
     else:
         chosen, meta = locate_box(frame_path, claim)
-        method = "Muse Spark box (SAM found nothing)" if use_sam else "Muse Spark box"
+        method = f"{model_label(meta.get('model'))} box" + (" (SAM found nothing)" if use_sam else "")
         report["calls"].append(meta)
 
     draw_evidence(frame_path, chosen, run_dir / "evidence.png", f"{claim['element']} · {method}")
@@ -306,6 +306,6 @@ if __name__ == "__main__":
         print(f"  SAM '{t['concept']}': {t['boxes']} boxes, {t['on_bug_frame']} on bug frame, {t['latency_s']}s, "
               f"{t['mode']} mode, frames processed {t['frames_processed']}")
     if "picked" in r:
-        print(f"  Muse Spark picked #{r['picked']} of {len(r['candidates'])}: {r['pick_reason']}")
+        print(f"  Muse Spark Open picked #{r['picked']} of {len(r['candidates'])}: {r['pick_reason']}")
     b = r["box"]
     print(f"{r['method']}: ({b['left']:.0f},{b['top']:.0f})-({b['right']:.0f},{b['bottom']:.0f}) -> {args[0]}/evidence.png")
