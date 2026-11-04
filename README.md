@@ -1,17 +1,74 @@
 # ReproCam
 
-Film a bug, say what went wrong, get a failing Playwright test that proves it.
+**Film a bug, say what went wrong, get a failing Playwright test that proves it.**
 
-> Built from scratch during the Meta Global AI Developer Hackathon (Oct 27 – Nov 4, 2026).
-> No pre-existing code.
+> **100% built during the Meta Global AI Developer Hackathon (Oct 27 – Nov 4, 2026). No pre-existing code.**
 
-## Meta models used
-- **Muse Voice Transcribe** — narration to text
-- **Muse Spark / Muse Spark Open** (Meta API, Baseten, Fireworks) — understands frames, plans steps, writes the test
-- **SAM 3.1** — finds the broken UI element on the bug frame (video tracking optional)
+- **Live app:** https://admin-34790--reprocam-web.us-east.modal.run (practice store: `/store/`). "Try a sample bug" replays a real run at $0.
+- **Demo video (3 min):** _link added at submission_
+- **Track:** Indie · **Problem statement:** Build for Your World
 
-SAM proposes, Muse Spark decides: SAM 3.1 boxes the candidate elements (every price on the screen),
-and Muse Spark picks the one the tester's claim is about.
+## Why
+
+"Can't reproduce" is where bug reports go to die. A tester sees a bug, records it, and a developer still has to
+rebuild the exact steps by hand before anything gets fixed. I'm a senior SDET; this is the tool I wanted: the recording itself becomes a test that fails until the bug is fixed.
+
+## How it works
+
+```mermaid
+flowchart LR
+  V[Bug recording + narration] --> T[Muse Voice Transcribe<br/>narration → text]
+  V --> F[Keyframes]
+  T --> U[Muse Spark<br/>steps + bug claim]
+  F --> U
+  U --> G[Muse Spark Open<br/>writes Playwright test]
+  G --> R[Run in sandbox<br/>buggy build]
+  R --> J{Judge: failed for<br/>the claimed reason?}
+  J -- no --> G
+  J -- yes --> K{Passes on a<br/>known-good build?}
+  K -- no: expectation wrong --> G
+  K -- yes --> E[SAM 3.1 proposes boxes<br/>Muse Spark Open picks the broken one]
+  E --> TK[Ticket + failing test<br/>= regression test]
+```
+
+ReproCam only says **REPRODUCED · verified** when the test fails on the buggy build *and* passes on a known-good
+build. If its idea of correct behaviour is wrong, it retries; if it can't prove the bug, it says so.
+
+## Meta models used (every model in the product is a Meta model)
+
+| Step | Model | Where it runs |
+|---|---|---|
+| Narration → text | **Muse Voice Transcribe** | Meta Model API |
+| Video frames + narration → steps and bug claim | **Muse Spark** (`muse-spark-1.3`, vision) | Meta Model API |
+| Write the test, judge the failure, pick the evidence box | **Muse Spark Open** (open weights, `meta-models/muse-spark-open-1026`) | Baseten (hackathon endpoint) |
+| Find candidate UI elements on the bug frame | **SAM 3.1** | Meta Model API |
+
+**SAM proposes, Muse Spark Open decides:** SAM 3.1 boxes the candidate elements (every price on the screen), and
+Muse Spark Open picks the one the tester's claim is about.
+
+## Results (measured, on our 3 planted bugs)
+
+- The demo run of each of the 3 bugs reproduces **and verifies against the known-good build**; bug2 needed a retry
+  because the first test's expected behaviour was wrong, which the known-good check caught.
+- Reasoning effort: 7/9, 8/9, 7/9 verified at low/medium/high; no level clearly better, so we use low (55 s and
+  about $0.02 per run, measured on Fireworks). bug1 and bug3 verified every time; bug2 is the weak one (1 of 3 at
+  low). Details below.
+- Understanding gets the key steps right in 6 of 9 runs, which is exactly why ReproCam proves every bug before
+  filing it. See *Known limitations*.
+- Generated code never runs in the web server: each test runs in a Modal Sandbox with no network and no secrets.
+
+## Who it's for
+
+- **QA teams:** turn manual test recordings into automated regression tests.
+- **Support teams:** turn customer screen recordings into fixable, verified tickets.
+- **Crowd-testing companies:** accept only bug videos that reproduce.
+
+## Roadmap
+
+- **Distil the judge into Muse Glimmer 30B** on Fireworks: 515 oracle-labeled training rows, a balanced 40-row
+  held-out eval and fixed settings are ready (`docs/glimmer.md`); training was blocked by a Fireworks account issue
+  during the hackathon.
+- Run in CI on every bug report; native mobile apps; a stronger invariant library for shallow assertions.
 
 ## Layout
 - `store/`   practice web shop with planted bugs (the app under test)
@@ -41,8 +98,8 @@ Planted bugs (registry in `store/bugs.js`, one test per id in `tests/store/test_
 
 Ground-truth tests assert the correct behaviour, so they fail on buggy and pass on fixed:
 ```bash
-STORE_MODE=buggy pytest tests/store   # 8 failed (3 demo + 5 training-only bugs), 6 passed (public store hides training bugs)
-STORE_MODE=fixed pytest tests/store   # 14 passed
+STORE_MODE=buggy pytest tests/store   # 8 failed (3 demo + 5 training-only bugs), 13 passed
+STORE_MODE=fixed pytest tests/store   # 14 passed, 7 skipped
 ```
 
 ## Deploy (Modal)
@@ -105,7 +162,7 @@ On our 3 bugs no effort level was clearly better (7/9, 8/9, 7/9); we use low for
   fixed that miss but more often mislabels the recording as "not the app" (`docs/understand_stability.md`).
 - **Expected behaviour is the tester's guess.** Without a known-good build there is nothing to check the claim's
   `expected` against; such runs end "REPRODUCED · not verified".
-- **SAM finds things, not meanings.** "order total" returns no boxes; "price" returns every price. Muse Spark picks
+- **SAM finds things, not meanings.** "order total" returns no boxes; "price" returns every price. Muse Spark Open picks
   the claimed one, and the evidence image says so.
 - **Two providers in the live app.** Understanding runs on the Meta Model API (`UNDERSTAND_PROVIDER=meta`);
   live test writing, judging and the SAM box pick run on Baseten's hackathon Muse Spark Open endpoint
