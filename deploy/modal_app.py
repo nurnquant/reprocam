@@ -18,7 +18,7 @@ REMOTE = "/root/reprocam"
 
 # Never ship secrets, local runs, recordings (samples/<id>/video.mp4 is the web copy) or dev files.
 IGNORE = [".env", ".env.*", "**/.env", "**/.env.*", ".venv", ".git", "runs", "**/__pycache__", ".pytest_cache", "samples/*.mov",
-          "docs", "tests", "deploy", "data/llm_calls.jsonl", "data/judge_log.jsonl", "**/.DS_Store"]
+          "docs", "tests", "deploy", "video", "data/llm_calls.jsonl", "data/judge_log.jsonl", "**/.DS_Store"]
 
 web_image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -38,7 +38,7 @@ runs = modal.Volume.from_name("reprocam-runs", create_if_missing=True)
 
 
 @app.function(image=web_image, secrets=[modal.Secret.from_name("reprocam-keys"), modal.Secret.from_name("reprocam-owner")],
-              volumes={f"{REMOTE}/runs": runs}, max_containers=1, scaledown_window=600, timeout=900)
+              volumes={f"{REMOTE}/runs": runs}, min_containers=1, max_containers=1, scaledown_window=600, timeout=900)  # min_containers: warm for judging; back to 0 after Nov 9
 @modal.concurrent(max_inputs=50)
 @modal.asgi_app()
 def web():

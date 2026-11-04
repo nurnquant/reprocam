@@ -114,10 +114,11 @@ modal deploy deploy/modal_app.py
 ```
 
 **Deploy checklist** (every deploy, and after any secret change). The web container mounts the code and reads
-the secret when it starts, and it stays warm for 10 minutes, so a deploy alone can leave the old version serving.
+the secret when it starts, and one container stays warm through judging (`min_containers=1`, back to 0 after Nov 9),
+so a deploy alone can leave the old version serving.
 1. Redeploy: `modal deploy deploy/modal_app.py`.
 2. Stop the old container: `modal container list`, then `modal container stop -y <container id>` for each
-   `reprocam` container started before the deploy. The next request starts a fresh one.
+   `reprocam` container started before the deploy. A fresh one replaces it.
 3. Check `/api/config`: `curl -s <url>/api/config` must show the expected `llm_provider` and `max_images`
    (now: `llm_provider` `baseten`, `llm_model` `meta-models/muse-spark-open-1026`, `max_images` 8,
    `understand_provider` `meta`). Then `modal container list` again: one container,
